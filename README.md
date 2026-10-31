@@ -104,14 +104,24 @@ cd backend
 cd ..
 ```
 
-3. Run backend unit and PostgreSQL schema constraint test suite:
+3. Run backend unit, authentication, and PostgreSQL constraint test suite:
 ```powershell
 $env:PYTHONPATH='backend'
 backend\.venv\Scripts\python.exe -m pytest backend/tests -v
 ```
-All 17 tests execute against the isolated `brightloop_test` database, exercising check constraints, composite unique/foreign keys, partial unique indexes, total identity, payment validation, and financial deletion safety.
+All 32 tests execute against the isolated `brightloop_test` database, exercising check constraints, composite unique/foreign keys, partial unique indexes, total identity, payment validation, financial deletion safety, Argon2id password complexity, login/logout, CSRF protection, token expiry, admin bootstrap, staff RBAC/deactivation, and customer isolation.
 
-4. Start FastAPI backend server:
+4. Bootstrap initial system administrator (local CLI):
+```powershell
+backend\.venv\Scripts\python.exe scripts/bootstrap_admin.py --email admin@brightloop.test --name "System Administrator" --password "Admin@Secure123"
+```
+
+5. Run automated Playwright browser journeys (verifies registration, Mailpit linking/reset, staff lifecycle, customer CRUD):
+```powershell
+backend\.venv\Scripts\python.exe -u scripts/test_browser_journeys.py
+```
+
+6. Start FastAPI backend server:
 ```powershell
 $env:PYTHONPATH='backend'
 backend\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000

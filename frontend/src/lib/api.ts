@@ -24,6 +24,14 @@ export class ApiError extends Error {
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
 
+function getCsrfTokenFromCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("brightloop_csrf="));
+  return match ? decodeURIComponent(match.split("=")[1]) : null;
+}
+
 export async function apiClient<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -35,6 +43,15 @@ export async function apiClient<T>(
   const headers = new Headers(options.headers || {});
   if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
+  }
+
+  // Inject CSRF token for mutating requests if available
+  const method = (options.method || "GET").toUpperCase();
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && !headers.has("X-CSRF-Token")) {
+    const csrf = getCsrfTokenFromCookie();
+    if (csrf) {
+      headers.set("X-CSRF-Token", csrf);
+    }
   }
 
   const response = await fetch(url, {
@@ -49,7 +66,7 @@ export async function apiClient<T>(
       const data = await response.json();
       errorDetail = data.error || {
         code: "HTTP_ERROR",
-        message: data.message || `Request failed with status ${response.status}`,
+        message: data.message || data.detail || `Request failed with status ${response.status}`,
       };
     } catch {
       errorDetail = {

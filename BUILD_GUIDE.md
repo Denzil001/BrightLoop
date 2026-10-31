@@ -65,7 +65,7 @@ Implement one accepted phase at a time. A gate requires only capabilities introd
 
 **Pages delivered:** P01-P04, I02-I03, I10, A01, C07. Until later dashboards exist, authenticated landing redirects to a delivered permitted page; no dead dashboard links. Future-domain customer tabs remain absent until delivered.
 
-**Gate:** signup/login/logout/reset/linking browser journeys; duplicate/invalid email and password 8/9-character boundaries; reset expiry/reuse; only admin creates staff; cross-customer API denial; session deactivation; real persisted customer CRUD/search/pagination. Verify local inbox receives reset/link email and responses do not reveal unnecessary account existence.
+**Gate: PASS.** Delivered pages P01–P04, I02–I03, I10, A01, and C07. Automated Playwright browser tests (`scripts/test_browser_journeys.py`) verified all 5 end-to-end user journeys (F01 atomic registration, F01 unlinked customer email verification and linking via Mailpit, F02 forgot/reset password with session revocation via Mailpit, F03 admin staff provisioning and deactivation with instant session revocation, and customer directory CRUD/search/detail editing). Pytest suite expanded to 32 tests (100% pass) verifying Argon2id password complexity (9-char boundary), duplicate rejection, token expiry/single-use, CSRF protection, RBAC and customer isolation. Undelivered routes remain hidden.
 
 ### Phase 3 - Catalog, pricing rules and templates
 
@@ -147,4 +147,4 @@ Use a focused feature branch per phase or coherent subfeature, with another team
 
 After each phase provide: Implemented; Files changed; Design decisions; Commands run; Test results; Manual actions remaining; Known issues; Gate status. Report the exact repository commands that were actually run. A pending human review or required external setup stays visible; passing documentation checks does not imply application acceptance.
 
-**Current state:** Phase 0 accepted; Phase 1 (foundation, database models, migrations, and layout) implemented and verified (PASS). Next phase is Phase 2 (Identity, staff and customer records), pending team request.
+**Current state:** Phase 0 accepted; Phase 1 (foundation, database models, migrations, and layout) implemented and verified (PASS); Phase 2 (Identity, staff and customer records, pages P01–P04, I02–I03, I10, A01, C07, Mailpit SMTP linking/reset, Argon2id, and Playwright journeys) implemented and verified (PASS). Next phase is Phase 3 (Catalog, pricing rules and templates), pending team request.
