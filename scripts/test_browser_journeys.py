@@ -13,10 +13,19 @@ root_dir = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root_dir))
 sys.path.insert(0, str(root_dir / "backend"))
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 FRONTEND_URL = "http://localhost:3000"
 MAILPIT_API_URL = "http://127.0.0.1:8025/api/v1/messages"
+
+
+def is_mailpit_available() -> bool:
+    try:
+        req = urllib.request.Request(MAILPIT_API_URL)
+        with urllib.request.urlopen(req, timeout=1) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
 
 
 def get_mailpit_messages():
@@ -47,6 +56,8 @@ def find_email_for_recipient(recipient: str, max_wait: float = 8.0):
 
 
 def run_e2e_tests():
+    if not is_mailpit_available():
+        raise RuntimeError("Mailpit is required: start the inbox before acceptance tests. No journeys were run.")
     print("Starting Playwright E2E Browser Journey Tests...")
 
     with sync_playwright() as p:
@@ -76,7 +87,7 @@ def run_e2e_tests():
         checklist_items = page.locator(".space-y-0\\.5 li")
         assert checklist_items.count() == 4
         for i in range(4):
-            assert "text-emerald-600" in (checklist_items.nth(i).get_attribute("class") or "")
+            expect(checklist_items.nth(i)).to_contain_text("✓")
 
         # Submit registration
         page.click("button[type='submit']")
@@ -91,7 +102,8 @@ def run_e2e_tests():
         page.click("button[type='submit']")
 
         # Should redirect to /portal/profile
-        page.wait_for_url("**/portal/profile")
+        page.wait_for_url("**/portal")
+        page.goto(f"{FRONTEND_URL}/portal/profile")
         page.wait_for_selector(f"span:has-text('{cust_email}')")
         print("PASS: Signed in as customer and landed on /portal/profile")
 
@@ -115,25 +127,26 @@ def run_e2e_tests():
         link_email = f"unlinked_{link_uid}@brightloop.test"
         link_name = f"Corporate Client {link_uid}"
 
-        # 1. Create operational customer via backend API
-        create_req = urllib.request.Request(
-            "http://127.0.0.1:8000/api/v1/auth/register",
-            headers={"Content-Type": "application/json"},
-            data=json.dumps({
-                "name": link_name,
-                "email": link_email,
-                "password": "Valid@Password123",
-            }).encode("utf-8"),
-        )
-        # First register as normal to have initial user or let's create customer row via direct endpoint
-        # Let's bootstrap an admin to create the operational customer
+        # Bootstrap an admin to create the operational customer
         from scripts.bootstrap_admin import bootstrap_admin
         bootstrap_admin("admin_bootstrap@brightloop.test", "Admin Master", "Admin@Secure123", force=True)
+
+        # Obtain pre-auth CSRF
+        csrf_req = urllib.request.Request("http://127.0.0.1:8000/api/v1/auth/csrf")
+        with urllib.request.urlopen(csrf_req) as resp:
+            preauth_data = json.loads(resp.read().decode("utf-8"))
+            preauth_csrf = preauth_data["csrf_token"]
+            preauth_cookie = resp.headers.get("Set-Cookie")
 
         # Login as admin to get session
         admin_login_req = urllib.request.Request(
             "http://127.0.0.1:8000/api/v1/auth/login",
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "X-CSRF-Token": preauth_csrf,
+                "Cookie": preauth_cookie,
+                "Origin": "http://localhost:3000",
+            },
             data=json.dumps({
                 "email": "admin_bootstrap@brightloop.test",
                 "password": "Admin@Secure123",
@@ -151,6 +164,7 @@ def run_e2e_tests():
                 "Content-Type": "application/json",
                 "Cookie": admin_cookie,
                 "X-CSRF-Token": csrf_token,
+                "Origin": "http://localhost:3000",
             },
             data=json.dumps({
                 "name": link_name,
@@ -197,7 +211,8 @@ def run_e2e_tests():
         page.fill("input#password", "Linked@Password123")
         page.click("button[type='submit']")
 
-        page.wait_for_url("**/portal/profile")
+        page.wait_for_url("**/portal")
+        page.goto(f"{FRONTEND_URL}/portal/profile")
         page.wait_for_selector(f"span:has-text('{link_email}')")
         print("PASS: Verified linked customer signed in and accessed /portal/profile")
 
@@ -246,7 +261,8 @@ def run_e2e_tests():
         # Test login with new password succeeds
         page.fill("input#password", "New@Password456")
         page.click("button[type='submit']")
-        page.wait_for_url("**/portal/profile")
+        page.wait_for_url("**/portal")
+        page.goto(f"{FRONTEND_URL}/portal/profile")
         print("PASS: Signed in with new password successfully")
 
         page.click("button:has-text('Sign Out')")
@@ -262,7 +278,7 @@ def run_e2e_tests():
         page.fill("input#password", "Admin@Secure123")
         page.click("button[type='submit']")
 
-        page.wait_for_url("**/app/customers")
+        page.wait_for_url("**/app")
         print("PASS: Admin signed in and landed on operational shell")
 
         # Go to Staff Management
@@ -294,7 +310,7 @@ def run_e2e_tests():
         staff_page.fill("input#email", staff_email)
         staff_page.fill("input#password", "Staff@Pass1234")
         staff_page.click("button[type='submit']")
-        staff_page.wait_for_url("**/app/customers")
+        staff_page.wait_for_url("**/app")
         print("PASS: Staff member logged in and accessed operational customers")
 
         # Now in admin page: deactivate this staff member
@@ -366,15 +382,13 @@ def run_e2e_tests():
         browser.close()
 
     print("\n=======================================================")
-    print("ALL 5 BROWSER JOURNEYS PASSED WITH COMPLETE FIDELITY!")
+    print("Browser journeys: 5 passed, 0 failed, 0 skipped.")
     print("=======================================================")
 
 
+from browser_test_errors import install_redaction
+install_redaction()
+
+
 if __name__ == "__main__":
-    try:
-        run_e2e_tests()
-    except Exception as e:
-        print(f"\nFAILED E2E BROWSER TESTS: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    run_e2e_tests()

@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
@@ -30,11 +31,13 @@ class AppException(Exception):
         code: str,
         message: str,
         fields: Optional[List[dict]] = None,
+        headers: Optional[dict] = None,
     ):
         self.status_code = status_code
         self.code = code
         self.message = message
         self.fields = [ErrorField(**f) for f in fields] if fields else None
+        self.headers = headers
         super().__init__(message)
 
 
@@ -60,12 +63,24 @@ class ConflictException(AppException):
 
 class ValidationException(AppException):
     def __init__(self, message: str, fields: Optional[List[dict]] = None, code: str = "VALIDATION_ERROR"):
-        super().__init__(status.HTTP_422_UNPROCESSABLE_ENTITY, code, message, fields)
+        super().__init__(status.HTTP_422_UNPROCESSABLE_CONTENT, code, message, fields)
 
 
 class ServiceUnavailableException(AppException):
     def __init__(self, message: str = "Service unavailable", code: str = "SERVICE_UNAVAILABLE"):
         super().__init__(status.HTTP_503_SERVICE_UNAVAILABLE, code, message)
+
+
+def translate_database_error(e: IntegrityError) -> AppException:
+    """Translates database integrity errors into safe structured AppException without disclosing SQL, parameters, or database internals."""
+    err_str = str(e).lower()
+    if "unique constraint" in err_str or "duplicate key" in err_str or "uq_" in err_str:
+        return ConflictException(message="A resource with these unique properties already exists.")
+    if "foreign key constraint" in err_str or "fk_" in err_str:
+        return ValidationException(message="Referenced record does not exist or cannot be modified.")
+    if "check constraint" in err_str or "ck_" in err_str:
+        return ValidationException(message="Submitted values violate validation constraints.")
+    return ConflictException(message="Database integrity constraint violated.")
 
 
 def register_error_handlers(app: FastAPI) -> None:
@@ -80,7 +95,12 @@ def register_error_handlers(app: FastAPI) -> None:
                 "request_id": request_id,
             }
         }
-        return JSONResponse(status_code=exc.status_code, content=content)
+        return JSONResponse(status_code=exc.status_code, content=content, headers=exc.headers)
+
+    @app.exception_handler(IntegrityError)
+    async def integrity_error_handler(request: Request, exc: IntegrityError):
+        app_exc = translate_database_error(exc)
+        return await app_exception_handler(request, app_exc)
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
@@ -90,6 +110,7 @@ def register_error_handlers(app: FastAPI) -> None:
             401: "UNAUTHORIZED",
             403: "FORBIDDEN",
             405: "METHOD_NOT_ALLOWED",
+            429: "RATE_LIMITED",
         }
         code = code_map.get(exc.status_code, "HTTP_ERROR")
         message = exc.detail if isinstance(exc.detail, str) else "An error occurred"
@@ -101,7 +122,8 @@ def register_error_handlers(app: FastAPI) -> None:
                 "request_id": request_id,
             }
         }
-        return JSONResponse(status_code=exc.status_code, content=content)
+        headers = dict(exc.headers) if exc.headers else None
+        return JSONResponse(status_code=exc.status_code, content=content, headers=headers)
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -110,7 +132,7 @@ def register_error_handlers(app: FastAPI) -> None:
         for error in exc.errors():
             loc = ".".join(str(l) for l in error.get("loc", []) if l != "body")
             field_errors.append({"path": loc or "root", "message": error.get("msg", "Invalid input")})
-        
+
         content = {
             "error": {
                 "code": "VALIDATION_ERROR",
@@ -119,7 +141,7 @@ def register_error_handlers(app: FastAPI) -> None:
                 "request_id": request_id,
             }
         }
-        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=content)
+        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content=content)
 
     @app.exception_handler(Exception)
     async def generic_exception_handler(request: Request, exc: Exception):

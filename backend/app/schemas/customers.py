@@ -1,3 +1,4 @@
+from app.schemas.validation import required_text
 import re
 import uuid
 from datetime import datetime
@@ -8,6 +9,7 @@ EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class CustomerCreate(BaseModel):
+    _required_text = field_validator("name", mode="before")(required_text)
     name: str = Field(..., min_length=1, max_length=255)
     email: str = Field(..., max_length=255)
     company: Optional[str] = Field(None, max_length=255)
@@ -29,6 +31,7 @@ class CustomerCreate(BaseModel):
 
 
 class CustomerUpdate(BaseModel):
+    _required_text = field_validator("name", mode="before")(required_text)
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     company: Optional[str] = Field(None, max_length=255)
     phone: Optional[str] = Field(None, max_length=64)
@@ -42,6 +45,7 @@ class CustomerUpdate(BaseModel):
 
 
 class CustomerProfileUpdate(BaseModel):
+    _required_text = field_validator("name", mode="before")(required_text)
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     company: Optional[str] = Field(None, max_length=255)
     phone: Optional[str] = Field(None, max_length=64)
@@ -54,6 +58,7 @@ class CustomerProfileUpdate(BaseModel):
 
 
 class OwnProfileUpdate(BaseModel):
+    _required_text = field_validator("name", mode="before")(required_text)
     name: Optional[str] = Field(None, min_length=1, max_length=255)
 
 

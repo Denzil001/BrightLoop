@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
 import uuid
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
+from app.api.contracts import created_location, ordering
 from app.api.deps import (
     get_current_db,
     get_current_user,
@@ -21,10 +22,21 @@ from app.schemas.staff import StaffCreate, StaffListResponse, StaffResponse, Sta
 router = APIRouter()
 
 
+@router.get("/{staff_id}", response_model=StaffResponse)
+def get_staff(staff_id: uuid.UUID, db: Session = Depends(get_current_db),
+              _: User = Depends(require_role(["ADMIN"]))):
+    user = db.scalar(select(User).where(User.id == staff_id, User.role == "STAFF"))
+    if user is None:
+        raise HTTPException(404, "Staff member not found.")
+    return StaffResponse(id=user.id, name=user.name, email=user.email_normalized, role=user.role,
+        active=user.active, version=user.version, created_at=user.created_at, updated_at=user.updated_at)
+
+
 @router.get("", response_model=StaffListResponse)
 def list_staff(
     search: Optional[str] = Query(None),
     active: Optional[bool] = Query(None),
+    sort: str = Query("created_at", pattern="^(created_at|name|email)$"), descending: bool = True,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_current_db),
@@ -45,7 +57,7 @@ def list_staff(
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
 
     items_query = (
-        query.order_by(User.created_at.desc(), User.id)
+        query.order_by(*ordering(sort, descending, {"created_at": User.created_at, "name": User.name, "email": User.email_normalized}, User.id))
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
@@ -69,7 +81,7 @@ def list_staff(
 
 
 @router.post("", response_model=StaffResponse, status_code=status.HTTP_201_CREATED)
-def create_staff(
+def create_staff(response: Response,
     payload: StaffCreate,
     db: Session = Depends(get_current_db),
     _: User = Depends(require_role(["ADMIN"])),
@@ -79,7 +91,7 @@ def create_staff(
 
     valid, err_msg = validate_password_complexity(payload.initial_password)
     if not valid:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=err_msg)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=err_msg)
 
     existing_user = db.scalar(select(User).where(User.email_normalized == email_norm))
     if existing_user:
@@ -99,6 +111,7 @@ def create_staff(
     db.commit()
     db.refresh(user)
 
+    created_location(response, f"staff/{user.id}")
     return StaffResponse(
         id=user.id,
         name=user.name,

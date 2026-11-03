@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone, timedelta
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
@@ -9,8 +10,10 @@ from alembic import command
 
 from app.api.deps import get_current_db
 from app.core.config import get_settings
+from app.core.security import hash_password, hash_token
 from app.db.session import get_db
 from app.main import app
+from app.models.users import Session as UserSession, User
 
 settings = get_settings()
 
@@ -87,3 +90,73 @@ def client(db: Session) -> TestClient:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def admin_auth(db: Session) -> dict:
+    user = User(
+        email_normalized="admin_test_fixture@brightloop.test",
+        name="Admin Fixture",
+        password_hash=hash_password("Valid@Pass123"),
+        role="ADMIN",
+        active=True,
+    )
+    db.add(user)
+    db.commit()
+    raw_token = "admin_session_token_fixture"
+    raw_csrf = "admin_csrf_token_fixture"
+    user_session = UserSession(
+        user_id=user.id,
+        token_hash=hash_token(raw_token),
+        csrf_hash=hash_token(raw_csrf),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=2),
+    )
+    db.add(user_session)
+    db.commit()
+    return {"token": raw_token, "csrf_token": raw_csrf, "user": user}
+
+@pytest.fixture
+def staff_auth(db: Session) -> dict:
+    user = User(
+        email_normalized="staff_test_fixture@brightloop.test",
+        name="Staff Fixture",
+        password_hash=hash_password("Valid@Pass123"),
+        role="STAFF",
+        active=True,
+    )
+    db.add(user)
+    db.commit()
+    raw_token = "staff_session_token_fixture"
+    raw_csrf = "staff_csrf_token_fixture"
+    user_session = UserSession(
+        user_id=user.id,
+        token_hash=hash_token(raw_token),
+        csrf_hash=hash_token(raw_csrf),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=2),
+    )
+    db.add(user_session)
+    db.commit()
+    return {"token": raw_token, "csrf_token": raw_csrf, "user": user}
+
+@pytest.fixture
+def customer_auth(db: Session) -> dict:
+    user = User(
+        email_normalized="customer_test_fixture@brightloop.test",
+        name="Customer Fixture",
+        password_hash=hash_password("Valid@Pass123"),
+        role="CUSTOMER",
+        active=True,
+    )
+    db.add(user)
+    db.commit()
+    raw_token = "customer_session_token_fixture"
+    raw_csrf = "customer_csrf_token_fixture"
+    user_session = UserSession(
+        user_id=user.id,
+        token_hash=hash_token(raw_token),
+        csrf_hash=hash_token(raw_csrf),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=2),
+    )
+    db.add(user_session)
+    db.commit()
+    return {"token": raw_token, "csrf_token": raw_csrf, "user": user}

@@ -1,5 +1,2 @@
-import { redirect } from "next/navigation";
-
-export default function AppIndexPage() {
-  redirect("/app/customers");
-}
+import Dashboard from "@/components/reporting/Dashboard";
+export default function Page() {return <Dashboard />;}

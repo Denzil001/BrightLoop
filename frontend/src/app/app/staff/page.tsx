@@ -1,9 +1,15 @@
 "use client";
+import ScrollableRegion from "@/components/ScrollableRegion";
+import Modal from "@/components/Modal";
 
-import React, { useEffect, useState, useCallback } from "react";
+import type React from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Plus, Search, Filter, RefreshCw, ChevronLeft, ChevronRight, UserCheck, UserX, ShieldAlert } from "lucide-react";
 import { PasswordChecklist } from "@/components/PasswordChecklist";
 import { useAuth } from "@/context/AuthContext";
+import CollectionSort from "@/components/CollectionSort";
+import { useQueryState } from "@/lib/useUrlFilters";
+import { useDialogChanges, useUnsavedChanges } from "@/lib/useUnsavedChanges";
 import { apiClient, ApiError } from "@/lib/api";
 
 interface StaffItem {
@@ -25,14 +31,15 @@ interface StaffListResponse {
 }
 
 export default function StaffManagementPage() {
+  const requestSequence = useRef(0);
   const { user } = useAuth();
 
   const [staffList, setStaffList] = useState<StaffItem[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useQueryState("page", 1);
   const [pageSize] = useState(15);
-  const [search, setSearch] = useState("");
-  const [activeFilter, setActiveFilter] = useState<string>("");
+  const [search, setSearch] = useQueryState("search", "");
+  const [activeFilter, setActiveFilter] = useQueryState<string>("active", "");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,7 +57,10 @@ export default function StaffManagementPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const fetchStaff = useCallback(async () => {
+  const dialogDirty0 = useDialogChanges(drawerOpen, [name, email, password, confirmPassword]);
+  useUnsavedChanges(dialogDirty0);
+
+  const fetchStaff = useCallback(async () => {const request = ++requestSequence.current;
     setLoading(true);
     setError(null);
     try {
@@ -61,13 +71,13 @@ export default function StaffManagementPage() {
       if (activeFilter === "active") params.set("active", "true");
       if (activeFilter === "inactive") params.set("active", "false");
 
-      const res = await apiClient<StaffListResponse>(`/staff?${params.toString()}`);
+      const res = await apiClient<StaffListResponse>(`/staff?${params.toString()}`); if (request !== requestSequence.current) return;
       setStaffList(res.items);
       setTotal(res.total);
-    } catch (err) {
+    } catch (err) {if (request !== requestSequence.current) return;
       setError(err instanceof ApiError ? err.message : "Failed to load staff list.");
     } finally {
-      setLoading(false);
+      if (request === requestSequence.current) setLoading(false);
     }
   }, [page, pageSize, search, activeFilter]);
 
@@ -146,6 +156,7 @@ export default function StaffManagementPage() {
 
   return (
     <div className="space-y-6">
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -156,7 +167,7 @@ export default function StaffManagementPage() {
             Provision staff members, configure operational access and manage account lifecycles
           </p>
         </div>
-        <button
+        <button type="button"
           onClick={() => setDrawerOpen(true)}
           className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium shadow-sm transition"
         >
@@ -164,11 +175,12 @@ export default function StaffManagementPage() {
           <span>Provision Staff</span>
         </button>
       </div>
+      <CollectionSort fields={[["created_at", "Created"], ["name", "Name"], ["email", "Email"]]} initial="created_at" descending={true} onChange={() => {if (page === 1) fetchStaff(); else setPage(1);}} />
 
       {/* Filter / Search Bar */}
       <div className="bg-white p-4 border border-slate-200 rounded-lg shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
         <div className="relative w-full md:w-96">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
           <input
             type="text"
             placeholder="Search staff by name or email..."
@@ -186,7 +198,7 @@ export default function StaffManagementPage() {
             <Filter className="w-4 h-4" />
             <span>Status:</span>
           </div>
-          <select
+          <select aria-label="Activity filter"
             value={activeFilter}
             onChange={(e) => {
               setActiveFilter(e.target.value);
@@ -199,7 +211,7 @@ export default function StaffManagementPage() {
             <option value="inactive">Inactive</option>
           </select>
 
-          <button
+          <button type="button"
             onClick={() => fetchStaff()}
             title="Refresh"
             className="p-2 border border-slate-300 rounded-md hover:bg-slate-50 text-slate-600 transition"
@@ -217,7 +229,7 @@ export default function StaffManagementPage() {
 
       {/* Staff Table */}
       <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        <ScrollableRegion className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
@@ -271,14 +283,14 @@ export default function StaffManagementPage() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       {s.id === user?.id ? (
-                        <span className="text-xs text-slate-400 italic">Current User</span>
+                        <span className="text-xs text-slate-500 italic">Current User</span>
                       ) : (
-                        <button
+                        <button type="button"
                           onClick={() => setConfirmModalUser(s)}
                           className={`text-xs font-medium ${
                             s.active
                               ? "text-red-600 hover:text-red-800"
-                              : "text-emerald-600 hover:text-emerald-800"
+                              : "text-emerald-700 hover:text-emerald-800"
                           }`}
                         >
                           {s.active ? "Deactivate" : "Reactivate"}
@@ -290,7 +302,7 @@ export default function StaffManagementPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollableRegion>
 
         {/* Pagination Bar */}
         <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
@@ -299,7 +311,7 @@ export default function StaffManagementPage() {
             {Math.min(page * pageSize, total)} of {total} staff member{total !== 1 ? "s" : ""}
           </div>
           <div className="flex items-center gap-2">
-            <button
+            <button type="button" aria-label="Previous page"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
               className="p-1 border border-slate-300 rounded hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed"
@@ -309,7 +321,7 @@ export default function StaffManagementPage() {
             <span className="font-medium">
               Page {page} of {totalPages}
             </span>
-            <button
+            <button type="button" aria-label="Next page"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
               className="p-1 border border-slate-300 rounded hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed"
@@ -322,15 +334,15 @@ export default function StaffManagementPage() {
 
       {/* Provision Staff Drawer */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-40 flex justify-end">
+        <Modal className="fixed inset-0 z-50 overflow-y-auto flex justify-end" onDismiss={() => setDrawerOpen(false)} busy={createLoading}>
           <div className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col">
             <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-900">
                 Provision Staff Account
               </h2>
-              <button
-                onClick={() => setDrawerOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg"
+              <button type="button" aria-label="Close dialog"
+                data-discard-form onClick={() => setDrawerOpen(false)}
+                className="text-slate-500 hover:text-slate-600 text-lg"
               >
                 ✕
               </button>
@@ -344,10 +356,10 @@ export default function StaffManagementPage() {
               )}
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label htmlFor="field-app-staff-page-tsx-1" className="block text-xs font-semibold text-slate-700 mb-1">
                   Full Name <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input id="field-app-staff-page-tsx-1"
                   type="text"
                   required
                   value={name}
@@ -358,10 +370,10 @@ export default function StaffManagementPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label htmlFor="field-app-staff-page-tsx-2" className="block text-xs font-semibold text-slate-700 mb-1">
                   Email Address <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input id="field-app-staff-page-tsx-2"
                   type="email"
                   required
                   value={email}
@@ -372,10 +384,10 @@ export default function StaffManagementPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label htmlFor="field-app-staff-page-tsx-3" className="block text-xs font-semibold text-slate-700 mb-1">
                   Assigned Role
                 </label>
-                <input
+                <input id="field-app-staff-page-tsx-3"
                   type="text"
                   readOnly
                   value="STAFF"
@@ -387,10 +399,10 @@ export default function StaffManagementPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label htmlFor="field-app-staff-page-tsx-4" className="block text-xs font-semibold text-slate-700 mb-1">
                   Initial Password <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input id="field-app-staff-page-tsx-4"
                   type="password"
                   required
                   value={password}
@@ -402,10 +414,10 @@ export default function StaffManagementPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label htmlFor="field-app-staff-page-tsx-5" className="block text-xs font-semibold text-slate-700 mb-1">
                   Confirm Password <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input id="field-app-staff-page-tsx-5"
                   type="password"
                   required
                   value={confirmPassword}
@@ -418,7 +430,7 @@ export default function StaffManagementPage() {
               <div className="pt-4 border-t border-slate-200 flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setDrawerOpen(false)}
+                  data-discard-form onClick={() => setDrawerOpen(false)}
                   className="px-4 py-2 border border-slate-300 rounded text-sm font-medium text-slate-700 hover:bg-slate-50"
                 >
                   Cancel
@@ -433,12 +445,12 @@ export default function StaffManagementPage() {
               </div>
             </form>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Confirmation Modal */}
       {confirmModalUser && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-40 flex items-center justify-center p-4">
+        <Modal className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4" onDismiss={() => setConfirmModalUser(null)} busy={actionLoading}>
           <div className="w-full max-w-md bg-white rounded-xl shadow-2xl p-6">
             <h3 className="text-lg font-bold text-slate-900 mb-2">
               {confirmModalUser.active ? "Deactivate Staff Member?" : "Reactivate Staff Member?"}
@@ -481,7 +493,7 @@ export default function StaffManagementPage() {
               </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

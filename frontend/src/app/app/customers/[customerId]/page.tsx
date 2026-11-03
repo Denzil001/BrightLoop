@@ -1,8 +1,11 @@
 "use client";
+import Modal from "@/components/Modal";
 
-import React, { useEffect, useState, use } from "react";
+import type React from "react";
+import { useEffect, useState, useCallback, use } from "react";
 import Link from "next/link";
 import { ChevronLeft, Edit, CheckCircle2, Clock, MapPin, Phone, Mail, Building } from "lucide-react";
+import { useDialogChanges, useUnsavedChanges } from "@/lib/useUnsavedChanges";
 import { apiClient, ApiError } from "@/lib/api";
 
 interface CustomerDetail {
@@ -50,7 +53,10 @@ export default function CustomerDetailPage({
   const [postal, setPostal] = useState("");
   const [country, setCountry] = useState("");
 
-  const fetchDetail = async () => {
+  const editDirty = useDialogChanges(editModalOpen, [name, company, phone, address1, address2, city, state, postal, country]);
+  useUnsavedChanges(editDirty);
+
+  const fetchDetail = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -70,11 +76,11 @@ export default function CustomerDetailPage({
     } finally {
       setLoading(false);
     }
-  };
+  }, [customerId]);
 
   useEffect(() => {
     fetchDetail();
-  }, [customerId]);
+  }, [fetchDetail]);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -167,7 +173,7 @@ export default function CustomerDetailPage({
             )}
           </div>
 
-          <button
+          <button type="button"
             onClick={() => setEditModalOpen(true)}
             className="inline-flex items-center gap-2 px-3.5 py-2 border border-slate-300 rounded-md text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-sm transition"
           >
@@ -186,7 +192,7 @@ export default function CustomerDetailPage({
           </h2>
           <div className="space-y-3 text-sm">
             <div className="flex items-start gap-3">
-              <Mail className="w-4 h-4 text-slate-400 mt-0.5" />
+              <Mail className="w-4 h-4 text-slate-500 mt-0.5" />
               <div>
                 <p className="text-xs text-slate-500">Email Address (Immutable)</p>
                 <p className="font-medium text-slate-900">{customer.email}</p>
@@ -194,7 +200,7 @@ export default function CustomerDetailPage({
             </div>
 
             <div className="flex items-start gap-3">
-              <Phone className="w-4 h-4 text-slate-400 mt-0.5" />
+              <Phone className="w-4 h-4 text-slate-500 mt-0.5" />
               <div>
                 <p className="text-xs text-slate-500">Phone</p>
                 <p className="font-medium text-slate-900">{customer.phone || "Not provided"}</p>
@@ -202,7 +208,7 @@ export default function CustomerDetailPage({
             </div>
 
             <div className="flex items-start gap-3">
-              <Building className="w-4 h-4 text-slate-400 mt-0.5" />
+              <Building className="w-4 h-4 text-slate-500 mt-0.5" />
               <div>
                 <p className="text-xs text-slate-500">Company</p>
                 <p className="font-medium text-slate-900">{customer.company || "Not provided"}</p>
@@ -217,7 +223,7 @@ export default function CustomerDetailPage({
             Billing Address
           </h2>
           <div className="flex items-start gap-3 text-sm">
-            <MapPin className="w-4 h-4 text-slate-400 mt-0.5" />
+            <MapPin className="w-4 h-4 text-slate-500 mt-0.5" />
             <div className="space-y-1 text-slate-700">
               {customer.billing_address_line1 || customer.billing_city || customer.billing_country ? (
                 <>
@@ -240,14 +246,16 @@ export default function CustomerDetailPage({
         </div>
       </div>
 
-      {/* Upcoming Modules Information Banner */}
-      <div className="p-4 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-600">
-        <span className="font-semibold text-slate-800">Domain roadmap notice:</span> Subscriptions (Phase 4), Invoices (Phase 5), and Payments (Phase 6) tabs will activate seamlessly on this page as each domain is delivered.
+      <div className="flex flex-wrap gap-3 rounded-lg border bg-white p-4 text-sm">
+        <Link href={`/app/subscriptions?customer_id=${customer.id}`} className="rounded border border-slate-300 px-4 py-2 text-blue-700">View subscriptions</Link>
+        <Link href={`/app/invoices?customer_id=${customer.id}`} className="rounded border border-slate-300 px-4 py-2 text-blue-700">View invoices</Link>
+        <Link href={`/app/payments?customer_id=${customer.id}`} className="rounded border border-slate-300 px-4 py-2 text-blue-700">View payments</Link>
+        <Link href={`/app/subscriptions/new?customer_id=${customer.id}`} className="rounded bg-blue-600 px-4 py-2 text-white">Create subscription</Link>
       </div>
 
       {/* Edit Customer Dialog */}
       {editModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-40 flex items-center justify-center p-4">
+        <Modal className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4" onDismiss={() => setEditModalOpen(false)} busy={editLoading}>
           <div className="w-full max-w-lg bg-white rounded-xl shadow-2xl p-6">
             <h3 className="text-lg font-bold text-slate-900 mb-4">
               Edit Customer Profile
@@ -261,10 +269,10 @@ export default function CustomerDetailPage({
 
             <form onSubmit={handleUpdate} className="space-y-4 text-sm">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label htmlFor="field-app-customers-customerId-page-tsx-1" className="block text-xs font-semibold text-slate-700 mb-1">
                   Full / Organization Name
                 </label>
-                <input
+                <input id="field-app-customers-customerId-page-tsx-1"
                   type="text"
                   required
                   value={name}
@@ -275,10 +283,10 @@ export default function CustomerDetailPage({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label htmlFor="field-app-customers-customerId-page-tsx-2" className="block text-xs font-semibold text-slate-700 mb-1">
                     Company
                   </label>
-                  <input
+                  <input id="field-app-customers-customerId-page-tsx-2"
                     type="text"
                     value={company}
                     onChange={(e) => setCompany(e.target.value)}
@@ -286,10 +294,10 @@ export default function CustomerDetailPage({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label htmlFor="field-app-customers-customerId-page-tsx-3" className="block text-xs font-semibold text-slate-700 mb-1">
                     Phone
                   </label>
-                  <input
+                  <input id="field-app-customers-customerId-page-tsx-3"
                     type="text"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
@@ -299,10 +307,10 @@ export default function CustomerDetailPage({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label htmlFor="field-app-customers-customerId-page-tsx-4" className="block text-xs font-semibold text-slate-700 mb-1">
                   Billing Address Line 1
                 </label>
-                <input
+                <input id="field-app-customers-customerId-page-tsx-4"
                   type="text"
                   value={address1}
                   onChange={(e) => setAddress1(e.target.value)}
@@ -312,10 +320,10 @@ export default function CustomerDetailPage({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label htmlFor="field-app-customers-customerId-page-tsx-5" className="block text-xs font-semibold text-slate-700 mb-1">
                     City
                   </label>
-                  <input
+                  <input id="field-app-customers-customerId-page-tsx-5"
                     type="text"
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
@@ -323,10 +331,10 @@ export default function CustomerDetailPage({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label htmlFor="field-app-customers-customerId-page-tsx-6" className="block text-xs font-semibold text-slate-700 mb-1">
                     State
                   </label>
-                  <input
+                  <input id="field-app-customers-customerId-page-tsx-6"
                     type="text"
                     value={state}
                     onChange={(e) => setState(e.target.value)}
@@ -337,10 +345,10 @@ export default function CustomerDetailPage({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label htmlFor="field-app-customers-customerId-page-tsx-7" className="block text-xs font-semibold text-slate-700 mb-1">
                     Postal Code
                   </label>
-                  <input
+                  <input id="field-app-customers-customerId-page-tsx-7"
                     type="text"
                     value={postal}
                     onChange={(e) => setPostal(e.target.value)}
@@ -348,10 +356,10 @@ export default function CustomerDetailPage({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label htmlFor="field-app-customers-customerId-page-tsx-8" className="block text-xs font-semibold text-slate-700 mb-1">
                     Country
                   </label>
-                  <input
+                  <input id="field-app-customers-customerId-page-tsx-8"
                     type="text"
                     value={country}
                     onChange={(e) => setCountry(e.target.value)}
@@ -363,7 +371,7 @@ export default function CustomerDetailPage({
               <div className="pt-4 border-t border-slate-200 flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setEditModalOpen(false)}
+                  data-discard-form onClick={() => setEditModalOpen(false)}
                   className="px-4 py-2 border border-slate-300 rounded text-sm font-medium text-slate-700 hover:bg-slate-50"
                 >
                   Cancel
@@ -378,7 +386,7 @@ export default function CustomerDetailPage({
               </div>
             </form>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

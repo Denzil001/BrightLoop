@@ -1,9 +1,12 @@
 "use client";
+import Modal from "@/components/Modal";
 
-import React, { useEffect, useState } from "react";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { KeyRound, User, Mail, Shield, CheckCircle2 } from "lucide-react";
 import { PasswordChecklist } from "@/components/PasswordChecklist";
 import { useAuth } from "@/context/AuthContext";
+import { useDialogChanges, useUnsavedChanges } from "@/lib/useUnsavedChanges";
 import { apiClient, ApiError } from "@/lib/api";
 
 export default function OperationalProfilePage() {
@@ -22,6 +25,9 @@ export default function OperationalProfilePage() {
   const [pwdLoading, setPwdLoading] = useState(false);
   const [pwdError, setPwdError] = useState<string | null>(null);
   const [pwdSuccess, setPwdSuccess] = useState<string | null>(null);
+
+  const passwordDirty = useDialogChanges(pwdModalOpen, [currentPwd, newPwd, confirmPwd]);
+  useUnsavedChanges(passwordDirty || Boolean(user && name !== user.name));
 
   useEffect(() => {
     if (user) {
@@ -100,7 +106,7 @@ export default function OperationalProfilePage() {
 
         {profileSuccess && (
           <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded text-xs flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-700" />
             <span>Profile name updated successfully.</span>
           </div>
         )}
@@ -113,10 +119,10 @@ export default function OperationalProfilePage() {
 
         <form onSubmit={handleUpdateProfile} className="space-y-4 text-sm">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label htmlFor="field-app-profile-page-tsx-1" className="block text-xs font-semibold text-slate-700 mb-1">
               Full Name
             </label>
-            <input
+            <input id="field-app-profile-page-tsx-1"
               type="text"
               required
               value={name}
@@ -126,21 +132,21 @@ export default function OperationalProfilePage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <p className="block text-xs font-semibold text-slate-700 mb-1">
               Login Email (Read-Only)
-            </label>
+            </p>
             <div className="flex items-center gap-2 max-w-md px-3 py-2 border border-slate-200 bg-slate-50 text-slate-600 rounded text-sm">
-              <Mail className="w-4 h-4 text-slate-400" />
+              <Mail className="w-4 h-4 text-slate-500" />
               <span>{user?.email}</span>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <p className="block text-xs font-semibold text-slate-700 mb-1">
               Role & Permissions (Read-Only)
-            </label>
+            </p>
             <div className="flex items-center gap-2 max-w-md px-3 py-2 border border-slate-200 bg-slate-50 text-slate-600 rounded text-sm">
-              <Shield className="w-4 h-4 text-slate-400" />
+              <Shield className="w-4 h-4 text-slate-500" />
               <span className="font-semibold text-slate-800">{user?.role}</span>
             </div>
           </div>
@@ -168,7 +174,7 @@ export default function OperationalProfilePage() {
           Ensure your account stays secure by maintaining a strong password. Changing your password will automatically sign out any other active sessions.
         </p>
 
-        <button
+        <button type="button"
           onClick={() => {
             setPwdError(null);
             setPwdSuccess(null);
@@ -182,7 +188,7 @@ export default function OperationalProfilePage() {
 
       {/* Change Password Dialog */}
       {pwdModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-40 flex items-center justify-center p-4">
+        <Modal className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4" onDismiss={() => setPwdModalOpen(false)} busy={pwdLoading}>
           <div className="w-full max-w-md bg-white rounded-xl shadow-2xl p-6">
             <h3 className="text-lg font-bold text-slate-900 mb-4">
               Change Account Password
@@ -194,8 +200,8 @@ export default function OperationalProfilePage() {
                   {pwdSuccess}
                 </div>
                 <div className="flex justify-end">
-                  <button
-                    onClick={() => setPwdModalOpen(false)}
+                  <button type="button"
+                    data-discard-form onClick={() => setPwdModalOpen(false)}
                     className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
                   >
                     Close
@@ -211,10 +217,10 @@ export default function OperationalProfilePage() {
                 )}
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label htmlFor="field-app-profile-page-tsx-2" className="block text-xs font-semibold text-slate-700 mb-1">
                     Current Password <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input id="field-app-profile-page-tsx-2"
                     type="password"
                     required
                     value={currentPwd}
@@ -225,10 +231,10 @@ export default function OperationalProfilePage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label htmlFor="field-app-profile-page-tsx-3" className="block text-xs font-semibold text-slate-700 mb-1">
                     New Password <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input id="field-app-profile-page-tsx-3"
                     type="password"
                     required
                     value={newPwd}
@@ -240,10 +246,10 @@ export default function OperationalProfilePage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label htmlFor="field-app-profile-page-tsx-4" className="block text-xs font-semibold text-slate-700 mb-1">
                     Confirm New Password <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input id="field-app-profile-page-tsx-4"
                     type="password"
                     required
                     value={confirmPwd}
@@ -256,7 +262,7 @@ export default function OperationalProfilePage() {
                 <div className="pt-4 border-t border-slate-200 flex justify-end gap-3">
                   <button
                     type="button"
-                    onClick={() => setPwdModalOpen(false)}
+                    data-discard-form onClick={() => setPwdModalOpen(false)}
                     className="px-4 py-2 border border-slate-300 rounded text-sm font-medium text-slate-700 hover:bg-slate-50"
                   >
                     Cancel
@@ -272,7 +278,7 @@ export default function OperationalProfilePage() {
               </form>
             )}
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

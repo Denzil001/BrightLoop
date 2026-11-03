@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "files": {
+    "includes": ["src/**", "tests/**", "*.mjs", "tailwind.config.ts"]
+  },
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "css": { "parser": { "tailwindDirectives": true } },
+  "linter": {
+    "enabled": true,
+    "domains": { "react": "recommended", "next": "recommended" },
+    "rules": {
+      "preset": "recommended",
+      "correctness": {
+        "useExhaustiveDependencies": { "level": "error", "options": { "reportUnnecessaryDependencies": false } }
+      },
+      "suspicious": {
+        "noUnknownAtRules": { "level": "error", "options": { "ignore": ["tailwind"] } }
+      }
+    }
+  }
+}

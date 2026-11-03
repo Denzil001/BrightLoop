@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import type React from "react";
+import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient, ApiError } from "@/lib/api";
 
@@ -18,6 +19,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
+  authError: string;
   refreshUser: () => Promise<User | null>;
 }
 
@@ -27,8 +29,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const [authError, setAuthError] = useState("");
 
-  const refreshUser = async (): Promise<User | null> => {
+  const refreshUser = useCallback(async (): Promise<User | null> => {
     try {
       const currentUser = await apiClient<User>("/auth/me");
       setUser(currentUser);
@@ -39,11 +42,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     refreshUser();
-  }, []);
+  }, [refreshUser]);
 
   const login = async (email: string, password: string): Promise<User> => {
     const response = await apiClient<{ user: User; csrf_token: string }>("/auth/login", {
@@ -52,29 +55,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     setUser(response.user);
 
-    // Redirect to permitted landing route based on role
-    if (response.user.role === "ADMIN" || response.user.role === "STAFF") {
-      router.push("/app/customers");
-    } else {
-      router.push("/portal/profile");
-    }
-
     return response.user;
   };
 
   const logout = async () => {
+    setAuthError("");
     try {
       await apiClient("/auth/logout", { method: "POST" });
-    } catch {
-      // Ignore logout errors
-    } finally {
-      setUser(null);
-      router.push("/login");
+    } catch (error) {
+      if (!(error instanceof ApiError && error.status === 401)) {
+        setAuthError("Sign out could not be confirmed. Check your connection and try again.");
+        return;
+      }
     }
+    setUser(null);
+    router.push("/login");
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser, authError }}>
       {children}
     </AuthContext.Provider>
   );

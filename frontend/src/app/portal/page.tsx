@@ -1,5 +1,2 @@
-import { redirect } from "next/navigation";
-
-export default function PortalIndexPage() {
-  redirect("/portal/profile");
-}
+import Dashboard from "@/components/reporting/Dashboard";
+export default function Page() {return <Dashboard portal />;}

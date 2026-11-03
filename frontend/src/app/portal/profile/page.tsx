@@ -1,9 +1,12 @@
 "use client";
+import Modal from "@/components/Modal";
 
-import React, { useEffect, useState } from "react";
-import { KeyRound, User, Mail, Building, Phone, MapPin, CheckCircle2 } from "lucide-react";
+import type React from "react";
+import { useEffect, useState, useCallback } from "react";
+import { KeyRound, User, Mail, MapPin, CheckCircle2 } from "lucide-react";
 import { PasswordChecklist } from "@/components/PasswordChecklist";
 import { useAuth } from "@/context/AuthContext";
+import { useDialogChanges, useUnsavedChanges } from "@/lib/useUnsavedChanges";
 import { apiClient, ApiError } from "@/lib/api";
 
 interface CustomerProfileData {
@@ -23,7 +26,7 @@ interface CustomerProfileData {
 }
 
 export default function CustomerProfilePage() {
-  const { user, refreshUser } = useAuth();
+  const { refreshUser } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [profileData, setProfileData] = useState<CustomerProfileData | null>(null);
@@ -51,7 +54,11 @@ export default function CustomerProfilePage() {
   const [pwdError, setPwdError] = useState<string | null>(null);
   const [pwdSuccess, setPwdSuccess] = useState<string | null>(null);
 
-  const fetchProfile = async () => {
+  const passwordDirty = useDialogChanges(pwdModalOpen, [currentPwd, newPwd, confirmPwd]);
+  const profileDirty = Boolean(!loading && profileData && JSON.stringify([name, company, phone, address1, address2, city, state, postal, country]) !== JSON.stringify([profileData.name || "", profileData.company || "", profileData.phone || "", profileData.billing_address_line1 || "", profileData.billing_address_line2 || "", profileData.billing_city || "", profileData.billing_state || "", profileData.billing_postal_code || "", profileData.billing_country || "India"]));
+  useUnsavedChanges(passwordDirty || profileDirty);
+
+  const fetchProfile = useCallback(async () => {
     setLoading(true);
     try {
       const data = await apiClient<CustomerProfileData>("/profile");
@@ -70,11 +77,11 @@ export default function CustomerProfilePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchProfile();
-  }, []);
+  }, [fetchProfile]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,7 +167,7 @@ export default function CustomerProfilePage() {
 
       {saveSuccess && (
         <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-sm flex items-center gap-2">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+          <CheckCircle2 className="w-5 h-5 text-emerald-700" />
           <span>Your profile and billing details have been updated successfully.</span>
         </div>
       )}
@@ -182,10 +189,10 @@ export default function CustomerProfilePage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label htmlFor="field-portal-profile-page-tsx-1" className="block text-xs font-semibold text-slate-700 mb-1">
                 Full Name <span className="text-red-500">*</span>
               </label>
-              <input
+              <input id="field-portal-profile-page-tsx-1"
                 type="text"
                 required
                 value={name}
@@ -195,19 +202,19 @@ export default function CustomerProfilePage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <p className="block text-xs font-semibold text-slate-700 mb-1">
                 Login Email (Read-Only)
-              </label>
+              </p>
               <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 bg-slate-50 text-slate-600 rounded text-sm cursor-not-allowed">
-                <Mail className="w-4 h-4 text-slate-400" />
+                <Mail className="w-4 h-4 text-slate-500" />
                 <span>{profileData?.email}</span>
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <p className="block text-xs font-semibold text-slate-700 mb-1">
                 Company Name (Optional)
-              </label>
+              </p>
               <div className="relative">
                 <input
                   type="text"
@@ -220,10 +227,10 @@ export default function CustomerProfilePage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label htmlFor="field-portal-profile-page-tsx-2" className="block text-xs font-semibold text-slate-700 mb-1">
                 Phone Number
               </label>
-              <input
+              <input id="field-portal-profile-page-tsx-2"
                 type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
@@ -247,10 +254,10 @@ export default function CustomerProfilePage() {
 
           <div className="space-y-4 text-sm">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label htmlFor="field-portal-profile-page-tsx-3" className="block text-xs font-semibold text-slate-700 mb-1">
                 Address Line 1
               </label>
-              <input
+              <input id="field-portal-profile-page-tsx-3"
                 type="text"
                 value={address1}
                 onChange={(e) => setAddress1(e.target.value)}
@@ -260,10 +267,10 @@ export default function CustomerProfilePage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label htmlFor="field-portal-profile-page-tsx-4" className="block text-xs font-semibold text-slate-700 mb-1">
                 Address Line 2 (Optional)
               </label>
-              <input
+              <input id="field-portal-profile-page-tsx-4"
                 type="text"
                 value={address2}
                 onChange={(e) => setAddress2(e.target.value)}
@@ -274,10 +281,10 @@ export default function CustomerProfilePage() {
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label htmlFor="field-portal-profile-page-tsx-5" className="block text-xs font-semibold text-slate-700 mb-1">
                   City
                 </label>
-                <input
+                <input id="field-portal-profile-page-tsx-5"
                   type="text"
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
@@ -286,10 +293,10 @@ export default function CustomerProfilePage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label htmlFor="field-portal-profile-page-tsx-6" className="block text-xs font-semibold text-slate-700 mb-1">
                   State
                 </label>
-                <input
+                <input id="field-portal-profile-page-tsx-6"
                   type="text"
                   value={state}
                   onChange={(e) => setState(e.target.value)}
@@ -298,10 +305,10 @@ export default function CustomerProfilePage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label htmlFor="field-portal-profile-page-tsx-7" className="block text-xs font-semibold text-slate-700 mb-1">
                   Postal Code
                 </label>
-                <input
+                <input id="field-portal-profile-page-tsx-7"
                   type="text"
                   value={postal}
                   onChange={(e) => setPostal(e.target.value)}
@@ -310,10 +317,10 @@ export default function CustomerProfilePage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label htmlFor="field-portal-profile-page-tsx-8" className="block text-xs font-semibold text-slate-700 mb-1">
                   Country
                 </label>
-                <input
+                <input id="field-portal-profile-page-tsx-8"
                   type="text"
                   value={country}
                   onChange={(e) => setCountry(e.target.value)}
@@ -346,7 +353,7 @@ export default function CustomerProfilePage() {
           Maintain your account password. Changing your password will immediately sign out all other devices and active browser sessions.
         </p>
 
-        <button
+        <button type="button"
           onClick={() => {
             setPwdError(null);
             setPwdSuccess(null);
@@ -360,7 +367,7 @@ export default function CustomerProfilePage() {
 
       {/* Change Password Dialog */}
       {pwdModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-40 flex items-center justify-center p-4">
+        <Modal className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4" onDismiss={() => setPwdModalOpen(false)} busy={pwdLoading}>
           <div className="w-full max-w-md bg-white rounded-xl shadow-2xl p-6">
             <h3 className="text-lg font-bold text-slate-900 mb-4">
               Change Account Password
@@ -372,8 +379,8 @@ export default function CustomerProfilePage() {
                   {pwdSuccess}
                 </div>
                 <div className="flex justify-end">
-                  <button
-                    onClick={() => setPwdModalOpen(false)}
+                  <button type="button"
+                    data-discard-form onClick={() => setPwdModalOpen(false)}
                     className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
                   >
                     Close
@@ -389,10 +396,10 @@ export default function CustomerProfilePage() {
                 )}
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label htmlFor="field-portal-profile-page-tsx-9" className="block text-xs font-semibold text-slate-700 mb-1">
                     Current Password <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input id="field-portal-profile-page-tsx-9"
                     type="password"
                     required
                     value={currentPwd}
@@ -403,10 +410,10 @@ export default function CustomerProfilePage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label htmlFor="field-portal-profile-page-tsx-10" className="block text-xs font-semibold text-slate-700 mb-1">
                     New Password <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input id="field-portal-profile-page-tsx-10"
                     type="password"
                     required
                     value={newPwd}
@@ -418,10 +425,10 @@ export default function CustomerProfilePage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label htmlFor="field-portal-profile-page-tsx-11" className="block text-xs font-semibold text-slate-700 mb-1">
                     Confirm New Password <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input id="field-portal-profile-page-tsx-11"
                     type="password"
                     required
                     value={confirmPwd}
@@ -434,7 +441,7 @@ export default function CustomerProfilePage() {
                 <div className="pt-4 border-t border-slate-200 flex justify-end gap-3">
                   <button
                     type="button"
-                    onClick={() => setPwdModalOpen(false)}
+                    data-discard-form onClick={() => setPwdModalOpen(false)}
                     className="px-4 py-2 border border-slate-300 rounded text-sm font-medium text-slate-700 hover:bg-slate-50"
                   >
                     Cancel
@@ -450,7 +457,7 @@ export default function CustomerProfilePage() {
               </form>
             )}
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

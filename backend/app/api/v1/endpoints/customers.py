@@ -1,8 +1,9 @@
 import uuid
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from app.api.contracts import created_location, ordering
 from app.api.deps import (
     get_current_db,
     get_current_user,
@@ -47,6 +48,7 @@ def _to_customer_response(c: Customer) -> CustomerResponse:
 def list_customers(
     search: Optional[str] = Query(None),
     portal_status: Optional[str] = Query(None, pattern="^(linked|unlinked)$"),
+    sort: str = Query("created_at", pattern="^(created_at|name|email)$"), descending: bool = True,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_current_db),
@@ -70,7 +72,7 @@ def list_customers(
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
 
     items_query = (
-        query.order_by(Customer.created_at.desc(), Customer.id)
+        query.order_by(*ordering(sort, descending, {"created_at": Customer.created_at, "name": Customer.name, "email": Customer.email_normalized}, Customer.id))
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
@@ -85,7 +87,7 @@ def list_customers(
 
 
 @router.post("", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
-def create_customer(
+def create_customer(response: Response,
     payload: CustomerCreate,
     db: Session = Depends(get_current_db),
     _: User = Depends(require_role(["ADMIN", "STAFF"])),
@@ -117,6 +119,7 @@ def create_customer(
     db.commit()
     db.refresh(customer)
 
+    created_location(response, f"customers/{customer.id}")
     return _to_customer_response(customer)
 
 

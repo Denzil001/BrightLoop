@@ -1,17 +1,21 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
+from app.api.contracts import created_location
 from app.api.deps import (
     get_current_db,
     get_current_session,
     get_current_user,
     get_session_token_from_request,
     verify_csrf,
+    verify_origin,
+    verify_preauth_csrf,
 )
 from app.core.config import get_settings
 from app.core.security import (
+    generate_secure_token,
     hash_password,
     hash_token,
     normalize_email,
@@ -19,7 +23,8 @@ from app.core.security import (
     verify_password,
 )
 from app.models.customers import Customer
-from app.models.users import Session as UserSession, User
+from app.models.audit import AuditEvent
+from app.models.users import AuthChallenge, Session as UserSession, User
 from app.schemas.auth import (
     ChangePasswordRequest,
     CsrfResponse,
@@ -34,9 +39,7 @@ from app.schemas.auth import (
 )
 from app.services.auth import (
     check_rate_limit,
-    clear_failed_attempts,
     create_user_session,
-    record_failed_attempt,
     register_customer_flow,
     request_password_reset,
     reset_password,
@@ -54,9 +57,11 @@ def register(
     payload: RegisterRequest,
     response: Response,
     db: Session = Depends(get_current_db),
+    _: None = Depends(verify_origin),
+    __: str = Depends(verify_preauth_csrf),
 ):
     client_ip = request.client.host if request.client else "unknown"
-    check_rate_limit("register", client_ip, max_attempts=10, window_seconds=300)
+    check_rate_limit("register", client_ip, max_attempts=10, window_seconds=300, db=db)
 
     verified, message, user = register_customer_flow(
         db=db,
@@ -79,14 +84,19 @@ def register(
         active=user.active,
         customer_id=customer.id if customer else None,
     )
+    created_location(response, "auth/me")
     return RegisterResponse(message=message, requires_verification=False, user=user_dto)
 
 
 @router.post("/verify-signup", status_code=status.HTTP_200_OK)
 def verify_signup(
+    request: Request,
     payload: VerifySignupRequest,
     db: Session = Depends(get_current_db),
+    _: None = Depends(verify_origin),
+    __: str = Depends(verify_preauth_csrf),
 ):
+    check_rate_limit("verify_signup", request.client.host if request.client else "unknown", 10, 300, db)
     user = verify_signup_challenge(db, payload.token)
     return {"message": "Account verified and linked successfully. Please sign in.", "email": user.email_normalized}
 
@@ -97,17 +107,20 @@ def login(
     payload: LoginRequest,
     response: Response,
     db: Session = Depends(get_current_db),
+    _: None = Depends(verify_origin),
+    csrf_token: str = Depends(verify_preauth_csrf),
 ):
     client_ip = request.client.host if request.client else "unknown"
     email_norm = normalize_email(payload.email)
 
-    check_rate_limit("login", client_ip, max_attempts=15, window_seconds=300)
-    check_rate_limit("login_account", email_norm, max_attempts=10, window_seconds=300)
+    check_rate_limit("login", client_ip, max_attempts=15, window_seconds=300, db=db)
+    check_rate_limit("login_account", email_norm, max_attempts=10, window_seconds=300, db=db)
 
     user = db.scalar(select(User).where(User.email_normalized == email_norm))
     if not user or not verify_password(payload.password, user.password_hash):
-        record_failed_attempt("login", client_ip)
-        record_failed_attempt("login_account", email_norm)
+        db.add(AuditEvent(action="AUTH_LOGIN_FAILED", target_type="authentication",
+            target_id=hash_token(email_norm), payload={}))
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
@@ -119,10 +132,23 @@ def login(
             detail="Account has been deactivated. Please contact an administrator.",
         )
 
-    clear_failed_attempts("login", client_ip)
-    clear_failed_attempts("login_account", email_norm)
 
-    session_record, raw_session_token, raw_csrf_token = create_user_session(db, user)
+    verified_password_hash = user.password_hash
+    # Consume the pre-auth CSRF challenge if present
+    token_h = hash_token(csrf_token)
+    preauth = db.scalar(
+        select(AuthChallenge).where(
+            AuthChallenge.token_hash == token_h,
+            AuthChallenge.purpose == "PREAUTH_CSRF",
+            AuthChallenge.consumed_at.is_(None),
+        )
+    )
+    if preauth:
+        preauth.consumed_at = datetime.now(timezone.utc)
+        db.commit()
+
+    # Create new session with rotated CSRF token
+    session_record, raw_session_token, raw_csrf_token = create_user_session(db, user, expected_password_hash=verified_password_hash)
 
     settings = get_settings()
     is_prod = settings.APP_ENV == "production"
@@ -171,6 +197,8 @@ def logout(
     response: Response,
     db: Session = Depends(get_current_db),
     user_session: UserSession = Depends(get_current_session),
+    _: None = Depends(verify_csrf),
+    __: None = Depends(verify_origin),
 ):
     raw_token = get_session_token_from_request(request)
     revoke_session(db, raw_token)
@@ -200,20 +228,59 @@ def get_me(
 def get_csrf(
     request: Request,
     response: Response,
+    db: Session = Depends(get_current_db),
 ):
     token = request.cookies.get("brightloop_csrf")
-    if not token:
-        token = generate_secure_token(32)
+    now = datetime.now(timezone.utc)
+    valid_token = None
+
+    if token:
+        token_h = hash_token(token)
+        preauth = db.scalar(
+            select(AuthChallenge).where(
+                AuthChallenge.token_hash == token_h,
+                AuthChallenge.purpose == "PREAUTH_CSRF",
+                AuthChallenge.consumed_at.is_(None),
+                AuthChallenge.expires_at > now,
+            )
+        )
+        if preauth:
+            valid_token = token
+        else:
+            session = db.scalar(
+                select(UserSession).where(
+                    UserSession.csrf_hash == token_h,
+                    UserSession.revoked_at.is_(None),
+                    UserSession.expires_at > now,
+                )
+            )
+            if session:
+                valid_token = token
+
+    if not valid_token:
+        check_rate_limit("csrf_issue", request.client.host if request.client else "unknown", 60, 60, db)
+        valid_token = generate_secure_token(32)
+        challenge = AuthChallenge(
+            purpose="PREAUTH_CSRF",
+            token_hash=hash_token(valid_token),
+            expires_at=now + timedelta(hours=12),
+        )
+        db.add(challenge)
+        db.commit()
+
+        settings = get_settings()
         response.set_cookie(
             key="brightloop_csrf",
-            value=token,
+            value=valid_token,
             max_age=43200,
             httponly=False,
             samesite="lax",
-            secure=get_settings().APP_ENV == "production",
+            secure=settings.APP_ENV == "production",
             path="/",
         )
-    return CsrfResponse(csrf_token=token)
+
+    response.headers["X-CSRF-Token"] = valid_token
+    return CsrfResponse(csrf_token=valid_token)
 
 
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
@@ -221,9 +288,11 @@ def forgot_password(
     request: Request,
     payload: ForgotPasswordRequest,
     db: Session = Depends(get_current_db),
+    _: None = Depends(verify_origin),
+    __: str = Depends(verify_preauth_csrf),
 ):
     client_ip = request.client.host if request.client else "unknown"
-    check_rate_limit("forgot_pwd", client_ip, max_attempts=5, window_seconds=300)
+    check_rate_limit("forgot_pwd", client_ip, max_attempts=5, window_seconds=300, db=db)
 
     request_password_reset(db, payload.email)
     return {
@@ -236,9 +305,11 @@ def reset_password_endpoint(
     request: Request,
     payload: ResetPasswordRequest,
     db: Session = Depends(get_current_db),
+    _: None = Depends(verify_origin),
+    __: str = Depends(verify_preauth_csrf),
 ):
     client_ip = request.client.host if request.client else "unknown"
-    check_rate_limit("reset_pwd", client_ip, max_attempts=10, window_seconds=300)
+    check_rate_limit("reset_pwd", client_ip, max_attempts=10, window_seconds=300, db=db)
 
     reset_password(db, payload.token, payload.new_password)
     return {"message": "Password has been reset successfully. Please sign in with your new password."}
@@ -252,7 +323,10 @@ def change_password(
     user: User = Depends(get_current_user),
     user_session: UserSession = Depends(get_current_session),
     _: None = Depends(verify_csrf),
+    __: None = Depends(verify_origin),
 ):
+    user = db.scalar(select(User).where(User.id == user.id).with_for_update()
+                     .execution_options(populate_existing=True))
     if not verify_password(payload.current_password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -261,12 +335,14 @@ def change_password(
 
     valid, err_msg = validate_password_complexity(payload.new_password)
     if not valid:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=err_msg)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=err_msg)
 
     user.password_hash = hash_password(payload.new_password)
     user.version += 1
+    db.add(AuditEvent(actor_id=user.id, action="AUTH_PASSWORD_CHANGED", target_type="user", target_id=str(user.id), payload={}))
+    # Commit password change and revocation atomically under the session-creation lock.
+    db.execute(update(UserSession).where(UserSession.user_id == user.id,
+        UserSession.revoked_at.is_(None), UserSession.token_hash != user_session.token_hash)
+        .values(revoked_at=datetime.now(timezone.utc)))
     db.commit()
-
-    # Revoke other sessions while keeping current session
-    revoke_all_user_sessions(db, user.id, except_token_hash=user_session.token_hash)
     return {"message": "Password changed successfully. Other sessions have been signed out."}

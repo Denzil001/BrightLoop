@@ -1,0 +1,50 @@
+"use client";
+import ScrollableRegion from "@/components/ScrollableRegion";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { apiClient } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import type { FinanceSummary, ReportRow } from "@/lib/reporting";
+import { businessDate } from "@/lib/payments";
+import { errorMessage, inputStyle, secondaryStyle } from "@/lib/subscriptions";
+import { formatCurrency } from "@/lib/utils";
+
+type View = "receipts" | "outstanding" | "overdue" | "active";
+export default function Page() {
+  const {user} = useAuth(); const today = businessDate();
+  const [first, setFirst] = useState(`${today.slice(0, 8)}01`); const [last, setLast] = useState(today);
+  const [customerId, setCustomerId] = useState(""); const [planId, setPlanId] = useState("");
+  const [customerSearch, setCustomerSearch] = useState(""); const [planSearch, setPlanSearch] = useState("");
+  const [customers, setCustomers] = useState<{id: string; name: string}[]>([]); const [plans, setPlans] = useState<{id: string; name: string}[]>([]);
+  const requestSequence = useRef(0);
+  const initialLoad = useRef(true);
+  const [summary, setSummary] = useState<FinanceSummary | null>(null); const [rows, setRows] = useState<ReportRow[]>([]);
+  const [view, setView] = useState<View>("receipts"); const [page, setPage] = useState(1); const [total, setTotal] = useState(0);
+  const [initialized, setInitialized] = useState(false);
+  const [detailTime, setDetailTime] = useState(0); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
+  useEffect(() => {const p = new URLSearchParams(window.location.search); const v = p.get("view"); if (["receipts", "outstanding", "overdue", "active"].includes(v || "")) setView(v as View); if (p.get("date_from")) setFirst(p.get("date_from") || ""); if (p.get("date_to")) setLast(p.get("date_to") || ""); setCustomerId(p.get("customer_id") || ""); setPlanId(p.get("plan_id") || ""); setInitialized(true);}, []);
+  useEffect(() => {if (!initialized) return; const p = new URLSearchParams({view, date_from: first, date_to: last}); if (customerId) p.set("customer_id", customerId); if (planId) p.set("plan_id", planId); window.history.replaceState(window.history.state, "", `/app/reports?${p}`);}, [initialized, view, first, last, customerId, planId]);
+  useEffect(() => {if (user?.role !== "ADMIN") return; let alive = true; const timer = setTimeout(async () => {try {
+    const result = await Promise.all([apiClient<{items: {id: string; name: string}[]}>(`/customers?page_size=100&search=${encodeURIComponent(customerSearch)}`), apiClient<{items: {id: string; name: string}[]}>(`/plans?page_size=100&search=${encodeURIComponent(planSearch)}`)]);
+    if (alive) {setCustomers(result[0].items); setPlans(result[1].items);}
+  } catch (e) {if (alive) setError(errorMessage(e));}}, 200); return () => {alive = false; clearTimeout(timer);};}, [user?.role, customerSearch, planSearch]);
+  const load = useCallback(async () => {if (user?.role !== "ADMIN") return; const request = ++requestSequence.current; setLoading(true); setError(""); try {
+    const p = new URLSearchParams({date_from: first, date_to: last}); if (customerId) p.set("customer_id", customerId); if (planId) p.set("plan_id", planId);
+    const [metrics, detail] = await Promise.all([apiClient<FinanceSummary>(`/reports/summary?${p}`), apiClient<{items: ReportRow[]; total: number; query_time_ms: number}>(`/reports/details?${p}&view=${view}&page=${page}`)]);
+    if (request !== requestSequence.current) return;
+    setSummary(metrics); setRows(detail.items); setTotal(detail.total); setDetailTime(detail.query_time_ms);
+  } catch (e) {if (request === requestSequence.current) setError(errorMessage(e));} finally {if (request === requestSequence.current) setLoading(false);}}, [user?.role, first, last, customerId, planId, view, page]);
+  useEffect(() => {requestSequence.current += 1; setLoading(true); const timer = setTimeout(load, initialLoad.current ? 0 : 200); initialLoad.current = false; return () => clearTimeout(timer);}, [load]);
+  if (user?.role !== "ADMIN") return <section><h1 className="text-xl font-semibold">Access restricted</h1><p>Finance reports are available to administrators.</p></section>;
+  const columns = view === "receipts" ? ["Payment", "Invoice", "Customer", "Date", "Amount"] : view === "active" ? ["Subscription", "Customer", "Plan", "Next billing"] : ["Invoice", "Customer", "Due", "Total", "Paid", "Outstanding"];
+  return <section className="space-y-6"><div className="flex flex-wrap justify-between gap-3"><div><h1 className="text-2xl font-bold">Finance report</h1><p className="text-sm text-slate-500">Ranged receipts and current balances from persisted records.</p></div><button type="button" className={secondaryStyle} disabled={loading} onClick={load}>Refresh report</button></div>
+    <div className="grid gap-3 rounded-lg border bg-white p-4 sm:grid-cols-2 lg:grid-cols-3"><label className="text-sm">Payments from<input type="date" className={inputStyle} value={first} onChange={e => {setFirst(e.target.value); setPage(1);}} /></label><label className="text-sm">Payments through<input type="date" className={inputStyle} value={last} onChange={e => {setLast(e.target.value); setPage(1);}} /></label><p className="self-center text-xs text-slate-500">Dates affect receipts only. Balances and service counts are current.</p><label className="text-sm">Find customer<input className={inputStyle} value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} /></label><label className="text-sm">Customer<select aria-label="Report customer" className={inputStyle} value={customerId} onChange={e => {setCustomerId(e.target.value); setPage(1);}}><option value="">All customers</option>{customerId && !customers.some(c => c.id === customerId) && <option value={customerId}>Selected customer</option>}{customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label className="text-sm">Find plan<input className={inputStyle} value={planSearch} onChange={e => setPlanSearch(e.target.value)} /></label><label className="text-sm">Plan<select aria-label="Report plan" className={inputStyle} value={planId} onChange={e => {setPlanId(e.target.value); setPage(1);}}><option value="">All plans</option>{planId && !plans.some(p => p.id === planId) && <option value={planId}>Selected plan</option>}{plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label></div>
+    {error && <p role="alert" className="rounded bg-red-50 p-4 text-red-700">{error} <button type="button" className="underline" onClick={load}>Retry</button></p>}
+    {loading ? <p role="status">Loading report…</p> : summary && <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[["Active service today", String(summary.active_subscriptions)], ["Received in selected range", formatCurrency(summary.received)], ["Current outstanding", formatCurrency(summary.outstanding)], ["Current overdue", formatCurrency(summary.overdue)]].map(([label, value]) => <div key={label} className="rounded-lg border bg-white p-5"><p className="text-sm text-slate-500">{label}</p><p className="mt-2 text-2xl font-semibold">{value}</p></div>)}</div><p className="text-sm text-slate-600">{summary.receipt_count} receipts · {summary.outstanding_count} outstanding invoices · {summary.overdue_count} overdue invoices. Active service excludes paused/ended terms. Outstanding excludes drafts/cancellations; overdue means due before today.</p>
+      <nav aria-label="Report detail views" className="flex flex-wrap gap-2">{(["receipts", "outstanding", "overdue", "active"] as View[]).map(v => <button type="button" key={v} aria-pressed={view === v} className={`${secondaryStyle} ${view === v ? "bg-blue-50 text-blue-800" : ""}`} onClick={() => {setView(v); setPage(1);}}>{v === "active" ? "Active subscriptions" : v[0].toUpperCase() + v.slice(1)}</button>)}</nav>
+      <ScrollableRegion className="overflow-x-auto rounded-lg border bg-white"><table className="w-full text-left text-sm"><thead className="bg-slate-50"><tr>{columns.map(c => <th className="p-3" key={c}>{c}</th>)}</tr></thead><tbody>{rows.map(r => <tr key={r.id} className="border-t">{view === "receipts" ? <><td className="p-3"><Link className="text-blue-700 underline" href={`/app/payments?invoice_id=${r.invoice_id}&payment_id=${r.id}`}>View payment</Link></td><td className="p-3"><Source href={`/app/invoices/${r.invoice_id}`} label={r.invoice_number} /></td><td className="p-3">{r.customer_name}</td><td className="p-3">{r.payment_date}</td><td className="p-3">{formatCurrency(r.amount)}</td></> : view === "active" ? <><td className="p-3"><Source href={`/app/subscriptions/${r.id}`} label={r.number} /></td><td className="p-3">{r.customer_name}</td><td className="p-3">{r.plan_name}</td><td className="p-3">{r.next_billing_date || "—"}</td></> : <><td className="p-3"><Source href={`/app/invoices/${r.id}`} label={r.number} /></td><td className="p-3">{r.customer_name}</td><td className="p-3">{r.due_date}</td>{(["total", "paid", "remaining"] as const).map(key => <td className="p-3" key={key}>{formatCurrency(r[key])}</td>)}</>}</tr>)}</tbody></table>{!rows.length && <p className="p-8 text-center text-slate-500">No records match this report view.</p>}</ScrollableRegion>
+      <div className="flex items-center justify-between text-sm"><span>{total} records · Page {page}</span><div className="flex gap-2"><button type="button" disabled={page === 1} className={secondaryStyle} onClick={() => setPage(page - 1)}>Previous</button><button type="button" disabled={page * 20 >= total} className={secondaryStyle} onClick={() => setPage(page + 1)}>Next</button></div></div><p className="text-xs text-slate-500">Snapshot {summary.as_of_date} · Summary query {summary.query_time_ms} ms · Detail query {detailTime} ms.</p>
+    </>}
+  </section>;
+}
+function Source({href, label}: {href: string; label?: string}) {return <Link className="text-blue-700 underline" href={href}>{label}</Link>;}

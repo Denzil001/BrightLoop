@@ -33,13 +33,8 @@ function LoginContent() {
 
     try {
       const user = await login(email, password);
-      if (returnUrl && returnUrl.startsWith("/")) {
-        router.push(returnUrl);
-      } else if (user.role === "ADMIN" || user.role === "STAFF") {
-        router.push("/app/customers");
-      } else {
-        router.push("/portal/profile");
-      }
+      const home = user.role === "CUSTOMER" ? "/portal" : "/app";
+      router.push(returnUrl && (returnUrl === home || returnUrl.startsWith(`${home}/`)) ? returnUrl : home);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 import uuid
 from typing import Generator, List, Optional
 from fastapi import Cookie, Depends, Header, HTTPException, Request, status
@@ -8,7 +9,7 @@ from app.core.config import Settings, get_settings
 from app.core.security import hash_token
 from app.db.session import get_db
 from app.models.customers import Customer
-from app.models.users import Session as UserSession, User
+from app.models.users import AuthChallenge, Session as UserSession, User
 
 
 def get_current_db() -> Generator[Session, None, None]:
@@ -121,17 +122,51 @@ def get_current_customer(
     return customer
 
 
+def verify_origin(request: Request) -> None:
+    """
+    Validate that request's Origin header (or Referer) matches configured allowed frontend origins.
+    Enforces server-side cross-origin request protection independent of CORS preflight.
+    """
+    origin = request.headers.get("origin")
+    if not origin:
+        referer = request.headers.get("referer")
+        if referer:
+            parsed = urlparse(referer)
+            if parsed.scheme and parsed.netloc:
+                origin = f"{parsed.scheme}://{parsed.netloc}"
+
+    if origin:
+        settings = get_settings()
+        allowed = [
+            o.strip().rstrip("/")
+            for o in settings.FRONTEND_ORIGIN.split(",")
+            if o.strip()
+        ]
+        if origin.rstrip("/") not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Forbidden: Disallowed cross-origin request from '{origin}'.",
+            )
+
+
 def verify_csrf(
     request: Request,
     session: UserSession = Depends(get_current_session),
     x_csrf_token: Optional[str] = Header(None, alias="X-CSRF-Token"),
+    _origin: None = Depends(verify_origin),
 ) -> None:
-    """Verify CSRF token for state-changing HTTP methods on authenticated routes."""
+    """Apply one consistent Origin and session-bound CSRF policy to protected writes."""
     if request.method in ["POST", "PUT", "PATCH", "DELETE"]:
         if not x_csrf_token:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Missing CSRF token header (X-CSRF-Token).",
+            )
+        cookie_csrf = request.cookies.get("brightloop_csrf")
+        if cookie_csrf and cookie_csrf != x_csrf_token:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="CSRF token header does not match cookie.",
             )
         token_h = hash_token(x_csrf_token)
         if token_h != session.csrf_hash:
@@ -139,3 +174,58 @@ def verify_csrf(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Invalid CSRF token.",
             )
+
+
+def verify_preauth_csrf(
+    request: Request,
+    db: Session = Depends(get_current_db),
+    x_csrf_token: Optional[str] = Header(None, alias="X-CSRF-Token"),
+) -> str:
+    """
+    Validate pre-auth CSRF token for public mutations (login, register, reset, etc.).
+    Requires X-CSRF-Token header bound to a PREAUTH_CSRF challenge or active session.
+    """
+    token = x_csrf_token
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Missing CSRF token header (X-CSRF-Token).",
+        )
+
+    cookie_csrf = request.cookies.get("brightloop_csrf")
+    if cookie_csrf and cookie_csrf != token:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF token header does not match cookie.",
+        )
+
+    token_h = hash_token(token)
+    now = datetime.now(timezone.utc)
+
+    # 1. Check unconsumed pre-auth challenge in PostgreSQL
+    challenge = db.scalar(
+        select(AuthChallenge).where(
+            AuthChallenge.token_hash == token_h,
+            AuthChallenge.purpose == "PREAUTH_CSRF",
+            AuthChallenge.consumed_at.is_(None),
+            AuthChallenge.expires_at > now,
+        )
+    )
+    if challenge:
+        return token
+
+    # 2. Check active user session (if client was already authenticated)
+    session = db.scalar(
+        select(UserSession).where(
+            UserSession.csrf_hash == token_h,
+            UserSession.revoked_at.is_(None),
+            UserSession.expires_at > now,
+        )
+    )
+    if session:
+        return token
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Invalid or expired CSRF token.",
+    )

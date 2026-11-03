@@ -12,6 +12,7 @@ def send_email(
     subject: str,
     body_text: str,
     body_html: Optional[str] = None,
+    attachments: Optional[list[tuple[str, bytes, str]]] = None,
 ) -> bool:
     """
     Send an email via configured SMTP (Mailpit local server in dev/test).
@@ -26,6 +27,9 @@ def send_email(
 
     if body_html:
         message.add_alternative(body_html, subtype="html")
+    for filename, content, content_type in attachments or []:
+        maintype, subtype = content_type.split("/", 1)
+        message.add_attachment(content, maintype=maintype, subtype=subtype, filename=filename)
 
     try:
         if settings.SMTP_SSL:

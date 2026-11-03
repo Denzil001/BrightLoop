@@ -30,6 +30,8 @@ from app.models.invoices import (
 from app.models.payments import Payment
 from app.models.billing import BillingRun, BillingOutcome, EmailAttempt
 from app.models.audit import AuditEvent
+from app.models.scheduler import SchedulerState
+from app.models.rate_limits import RateLimitWindow
 
 __all__ = [
     "Base",
@@ -70,4 +72,6 @@ __all__ = [
     "BillingOutcome",
     "EmailAttempt",
     "AuditEvent",
+    "SchedulerState",
+    "RateLimitWindow",
 ]

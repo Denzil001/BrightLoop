@@ -116,7 +116,7 @@ function RegisterContent() {
 
           {verificationSuccess && (
             <div className="my-6">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-emerald-100 text-emerald-600 text-xl font-bold mb-4">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-emerald-100 text-emerald-700 text-xl font-bold mb-4">
                 ✓
               </div>
               <p className="text-emerald-800 font-medium mb-2">

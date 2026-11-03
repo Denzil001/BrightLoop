@@ -101,6 +101,12 @@ class AuthChallenge(Base):
     consumed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    delivery_status: Mapped[str] = mapped_column(
+        String(32), server_default="PENDING", default="PENDING", nullable=False
+    )
+    delivery_attempts: Mapped[int] = mapped_column(
+        Integer, server_default="0", default=0, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -109,6 +115,10 @@ class AuthChallenge(Base):
         CheckConstraint(
             "purpose IN ('RESET', 'LINK_SIGNUP', 'PREAUTH_CSRF')",
             name="ck_auth_challenges_purpose",
+        ),
+        CheckConstraint(
+            "delivery_status IN ('PENDING', 'SENT', 'FAILED')",
+            name="ck_auth_challenges_delivery_status",
         ),
     )
 

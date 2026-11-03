@@ -111,6 +111,9 @@ class SubscriptionTerm(Base):
             ["agreement_versions.id", "agreement_versions.subscription_id"],
             ondelete="RESTRICT",
             name="fk_subscription_terms_source_version_sub",
+            # Agreement versions also reference their term. Order this existing
+            # constraint after table creation so schema comparison sees both FKs.
+            use_alter=True,
         ),
     )
 
@@ -154,6 +157,9 @@ class AgreementVersion(Base, TimestampMixin):
     proposed_interval: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     payment_term_days: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
     currency: Mapped[str] = mapped_column(CHAR(3), default="INR", nullable=False)
+    policy_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    pricing_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    validity_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
 
     __table_args__ = (
         UniqueConstraint("subscription_id", "sequence", name="uq_agreement_versions_seq"),
@@ -162,6 +168,7 @@ class AgreementVersion(Base, TimestampMixin):
         CheckConstraint("state IN ('DRAFT', 'ISSUED', 'ACCEPTED', 'SUPERSEDED')", name="ck_agreement_versions_state"),
         CheckConstraint("seat_quantity > 0", name="ck_agreement_versions_seat_qty_pos"),
         CheckConstraint("payment_term_days >= 0", name="ck_agreement_versions_payment_terms_nonneg"),
+        CheckConstraint("validity_days >= 0", name="ck_agreement_versions_validity_nonneg"),
         Index(
             "uq_agreement_versions_one_draft",
             "subscription_id",
@@ -207,7 +214,7 @@ class AgreementLine(Base):
         ForeignKey("product_variants.id", ondelete="RESTRICT"),
         nullable=True,
     )
-    snapshot_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    snapshot_name: Mapped[str] = mapped_column(Text, nullable=False)
     snapshot_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     snapshot_variant_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

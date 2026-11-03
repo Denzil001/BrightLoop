@@ -1,3 +1,4 @@
+from app.schemas.validation import required_text
 import re
 import uuid
 from datetime import datetime
@@ -8,9 +9,10 @@ EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class StaffCreate(BaseModel):
+    _required_text = field_validator("name", mode="before")(required_text)
     name: str = Field(..., min_length=1, max_length=255)
     email: str = Field(..., max_length=255)
-    initial_password: str = Field(..., min_length=9)
+    initial_password: str = Field(..., min_length=9, max_length=1024)
 
     @field_validator("email")
     @classmethod
@@ -22,6 +24,7 @@ class StaffCreate(BaseModel):
 
 
 class StaffUpdate(BaseModel):
+    _required_text = field_validator("name", mode="before")(required_text)
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     expected_version: Optional[int] = None
 

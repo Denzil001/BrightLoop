@@ -53,6 +53,9 @@ class Invoice(Base, TimestampMixin):
     )
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    full_period_end: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    service_days: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    full_period_days: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     invoice_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     due_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     currency: Mapped[str] = mapped_column(CHAR(3), default="INR", nullable=False)
@@ -85,6 +88,7 @@ class Invoice(Base, TimestampMixin):
             name="ck_invoices_state",
         ),
         CheckConstraint("period_end > period_start", name="ck_invoices_period_end_gt_start"),
+        CheckConstraint("service_days > 0 AND full_period_days >= service_days", name="ck_invoices_proration_days"),
         CheckConstraint("subtotal >= 0", name="ck_invoices_subtotal_nonneg"),
         CheckConstraint("discount_total >= 0", name="ck_invoices_discount_total_nonneg"),
         CheckConstraint("tax_total >= 0", name="ck_invoices_tax_total_nonneg"),
@@ -139,7 +143,7 @@ class InvoiceLine(Base):
         ForeignKey("agreement_lines.id", ondelete="RESTRICT"),
         nullable=True,
     )
-    snapshot_description: Mapped[str] = mapped_column(String(255), nullable=False)
+    snapshot_description: Mapped[str] = mapped_column(Text, nullable=False)
     snapshot_product_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     snapshot_variant_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

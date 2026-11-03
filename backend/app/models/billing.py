@@ -27,6 +27,9 @@ class BillingRun(Base):
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=True,
     )
+    retry_of_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("billing_runs.id", ondelete="RESTRICT", name="fk_billing_runs_retry_of"), nullable=True
+    )
     trigger: Mapped[str] = mapped_column(String(16), nullable=False)
     as_of_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     started_at: Mapped[datetime] = mapped_column(

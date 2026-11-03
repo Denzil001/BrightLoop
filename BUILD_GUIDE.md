@@ -1,61 +1,24 @@
-# Brightloop - Phase-by-phase implementation plan
+# BUILD_GUIDE.md - Brightloop Implementation Roadmap
 
-## 1. Scope and document map
+This guide specifies the implementation sequence, business defaults, phase gates, and performance targets for Brightloop.
 
-This is the implementation plan for `makeaton-initial`, based on the four-page Subscription Management System problem statement and the evaluator's message supplied by the team. This revision replaces the former Stage 0-18 Antigravity guide with Phase 0-9. No application implementation is claimed by this document.
+## 1. Sequence and scope
 
-- [AGENTS.md](AGENTS.md): persistent engineering, security and collaboration rules.
-- [docs/USER_FLOWS.md](docs/USER_FLOWS.md): authoritative roles, navigation, 32 page templates, page contents and user journeys.
-- [docs/PLANNING_VERIFICATION.md](docs/PLANNING_VERIFICATION.md): final source-to-plan coverage, consistency checks and decisions still requiring Phase 0 acceptance.
-- This file: build sequence, proposed business rules, dependencies and acceptance gates.
+Ten implementation phases (0 through 9) partition the project. Phase gates are hard stops: do not begin phase N+1 until phase N meets its gate.
 
-The evaluator's confirmed emphasis is database design, backend APIs, locally managed relational persistence, real dynamic data, graceful validation, team Git participation, clean interactive UI, navigation, performance, scalability, security, debugging and understanding the implementation. PostgreSQL and the approved application stack remain team choices consistent with that guidance. The exact order below is our delivery sequence, not a claimed official scoring formula.
+### Phase 0 - Planning, architecture, and database design
 
-**Deliver:** configure products/plans/taxes/discounts/templates -> prepare quotation -> confirm/activate subscription -> automatically generate invoices -> record full/partial payments -> reconcile reports -> customer portal.
+**Work:** document all schema models, constraints, data types, indexes, and cascades. Document the API route structure, status codes, and error response shapes. Propose initial business defaults for D01-D10 in `docs/business-rules.md`. Document the 32 page templates, their routes, permitted roles, and primary actions in `docs/USER_FLOWS.md`.
 
-**Scope boundaries:** one responsive web application, local PostgreSQL, configured SMTP, no online payment gateway, no separate mobile app, no BaaS, and no speculative AI/blockchain/chatbot features. Audit events are emitted by the relevant operations; a separate audit-management UI is not part of the page inventory. No marketing website, generic settings suite or unused screens.
+**Gate: PASS.** Phase 0 documentation completed and explicitly accepted by the team (decisions D01-D10 confirmed).
 
-## 2. Proposed product rules for Phase 0 acceptance
+### Phase 1 - Foundation, schema, and layout shell
 
-The concrete D01-D10 recommendations, pricing model, state transitions and expected financial/calendar examples are now maintained in [docs/business-rules.md](docs/business-rules.md). That document supersedes the earlier alternatives in this section without marking them accepted. The proposed seat count/excess-unit fields are reflected in the existing editor and plan pages; the page count stays 32.
+**Work:** initialize the repository with the agreed stack. Configure PostgreSQL connection pools for development and disposable test databases. Create initial Alembic migrations for all models. Add check constraints, unique constraints, and foreign key cascades. Add health and readiness endpoints. Create the shared responsive layout shell with navigation, role indicator, and unauthenticated state.
 
-Review [docs/database-design.md](docs/database-design.md), [docs/api-design.md](docs/api-design.md) and [docs/architecture.md](docs/architecture.md) with those rules. Record team acceptance or requested changes before migrations. Phase 0 preparation is complete; its acceptance checklist remains pending. All unchanged source requirements and engineering guardrails continue to apply.
+**Pages delivered:** Shared responsive layout shell, health/readiness endpoints, unauthenticated landing/login redirect. Hide navigation links to unbuilt features.
 
-## 3. Architecture and page delivery
-
-Use Next.js/TypeScript/Tailwind for the interface; FastAPI/Pydantic for APIs; SQLAlchemy/Alembic/PostgreSQL for persistence. Use React Hook Form/Zod for forms and TanStack Query where shared server state needs caching. HTTP routes call domain services; no financial rules in React or route handlers.
-
-Proposed modules: identity, customers, catalog/pricing, quotations/subscriptions, billing/invoices, payments, reporting and SMTP/document adapters. Build UI alongside each domain, with navigation exposing only completed, authorized routes.
-
-The schema review covers users/sessions/reset tokens, pending signup/verification/account-link records, customers, products/variants, plans/included lines, tax applicability, discount rules/assignments/redemptions, templates/lines, subscriptions/lines/agreement versions, quote versions/lines, lifecycle events/change requests, invoices/lines/tax/discount snapshots, payments, audit events and billing-run outcomes. Create a table only when its responsibility and constraints are justified in the ERD. Pending signup passwords and all one-time bearer tokens are stored only as hashes with expiry/consumption state.
-
-Key constraints: normalized email uniqueness; unique document numbers; valid periods/quantities; protected financial foreign keys; unique subscription/billing-period invoice; unique payment request key; safe discount-cap concurrency. Preserve customer/company billing identity as invoice snapshots. Index actual ownership, status/date, search and reporting queries.
-
-**32 page templates:** P01-P04 public; I01-I10 shared admin/staff; A01-A11 admin-only; C01-C07 customer. Admin can access 21 internal templates, staff 10, customers 7 portal templates. Shared templates are implemented once. Dialogs, tabs, root/role redirects, error states, email links and PDF responses are excluded from the count. Exact contents are in docs/USER_FLOWS.md.
-
-## 4. Phase plan and gates
-
-Implement one accepted phase at a time. A gate requires only capabilities introduced so far. Later-phase integration checks are activated when their prerequisites exist and remain regressions thereafter. Phase acceptance never waives previously passing security/integrity tests.
-
-### Phase 0 - Confirm scope, flows and relational design
-
-**Depends on:** this planning handoff and team review.
-
-**Work:** accept/replace the proposed rules in section 2; confirm role matrix and all 32 pages; produce the ERD, cardinalities, API outline, state tables, money examples, document snapshot strategy and concurrency plan. Record the actual repository state. Agree local PostgreSQL versus Docker-hosted local PostgreSQL, business timezone, SMTP testing and the measurable page-response test environment. Assign domain owners and another teammate for reviews; everyone contributes through Git.
-
-**Pages:** review all page designs; build none.
-
-**Gate:** PASS. Decisions D01–D10 accepted on 31 October 2026. Design and contracts reviewed and accepted. Phase 1 authorized.
-
-### Phase 1 - Reproducible foundation and database
-
-**Depends on:** accepted Phase 0 design.
-
-**Work:** create frontend/backend structure; local PostgreSQL setup; safe environment examples and ignore rules; pinned dependency manifests/lockfile strategy; FastAPI v1 modules, validated configuration, consistent errors, dependency-injected sessions, health/readiness and known-origin CORS. Configure invoice issuer/company details and currency through validated local configuration; a settings UI is not required. Add SQLAlchemy models and initial Alembic migrations for the approved schema, plus a separate disposable PostgreSQL test database. Record exact Windows setup/start/migration commands in README.
-
-**Pages:** app/auth/portal layout foundations only; temporary development health page is removed before final acceptance and is not in the 32-page product inventory.
-
-**Gate: PASS.** Frontend and backend start; readiness checks live PostgreSQL; schema verified from empty base through Alembic migrations (without create_all fallback); all 36 relational entities defined; composite foreign keys, partial unique indexes, and constraints exercised via Pytest (17 tests passing, including user email uniqueness, role check, product price non-negative, plan interval, invoice total identity, payment constraints, partial unique draft version, partial unique open pause, partial unique accepted effective date, cross-subscription term source FK, and financial deletion safety RESTRICT). Navigation hides undelivered routes; setup and reproduction commands documented in README.
+**Gate: PASS.** Alembic migrations run cleanly against empty databases. Database constraints verified with PostgreSQL test cases (non-negative prices, valid tax rates, invoice identity, payment restrictions, financial deletion protection, partial unique indexes for single draft agreement version, accepted version effective date uniqueness, and single open pause per term). Health endpoints return 200 with structured JSON and database latency. Frontend layout compiles, renders responsively, and hides unbuilt navigation.
 
 ### Phase 2 - Identity, staff and customer records
 
@@ -63,9 +26,9 @@ Implement one accepted phase at a time. A gate requires only capabilities introd
 
 **Work:** controlled admin bootstrap; atomic signup/customer creation; normalized unique email; Argon2id; login/logout and revoked sessions; password reset and safe existing-customer linking via local SMTP; role and ownership dependencies; authentication rate protection; CSRF strategy. Create minimal role shells, admin staff management, operational customer creation/search/detail/edit and own-profile/password forms. Deactivated staff loses active sessions.
 
-**Pages delivered:** P01-P04, I02-I03, I10, A01, C07. Until later dashboards exist, authenticated landing redirects to a delivered permitted page; no dead dashboard links. Future-domain customer tabs remain absent until delivered.
+**Pages delivered:** P01–P04, I02–I03, I10, A01, C07. Until later dashboards exist, authenticated landing redirects to a delivered permitted page; no dead dashboard links. Future-domain customer tabs remain absent until delivered.
 
-**Gate: PASS.** Delivered pages P01–P04, I02–I03, I10, A01, and C07. Automated Playwright browser tests (`scripts/test_browser_journeys.py`) verified all 5 end-to-end user journeys (F01 atomic registration, F01 unlinked customer email verification and linking via Mailpit, F02 forgot/reset password with session revocation via Mailpit, F03 admin staff provisioning and deactivation with instant session revocation, and customer directory CRUD/search/detail editing). Pytest suite expanded to 32 tests (100% pass) verifying Argon2id password complexity (9-char boundary), duplicate rejection, token expiry/single-use, CSRF protection, RBAC and customer isolation. Undelivered routes remain hidden.
+**Gate: PASS (Review corrections applied).** Delivered pages P01–P04, I02–I03, I10, A01, and C07. Automated Playwright browser tests (`scripts/test_browser_journeys.py`) verified all 5 end-to-end user journeys (F01 atomic registration, F01 unlinked customer email verification and linking via Mailpit, F02 forgot/reset password with session revocation via Mailpit, F03 admin staff provisioning and deactivation with instant session revocation, and customer directory CRUD/search/detail editing). Pytest suite expanded to 37 tests (100% pass) verifying fresh-browser CSRF token context, pre-auth CSRF challenge binding & rotation on login, Origin validation across public auth mutations and logout, CSRF required on logout, Starlette HTTP exception header preservation (`Retry-After` on 429), and truthful email delivery failure recording (`AuthChallenge.delivery_status` and `delivery_attempts` with check constraint, 503 on registration delivery failure without false success claims, generic 202 on forgot-password without account leakage, and automated recovery on retry). Undelivered routes remain hidden.
 
 ### Phase 3 - Catalog, pricing rules and templates
 
@@ -73,69 +36,135 @@ Implement one accepted phase at a time. A gate requires only capabilities introd
 
 **Work:** product/variant CRUD and archiving; plan fees/included lines, four intervals, quantity/availability/policy flags; tax rules/applicability; discount CRUD/scope/eligibility; template plan/product lines and validity days. Implement the shared Decimal pricing service and backend field validation. Add real admin forms and operation-only catalog reads for staff.
 
-**Pages delivered:** A02-A09.
+**Pages delivered:** A02–A09 (`/app/products`, `/app/products/[productId]`, `/app/plans`, `/app/plans/[planId]`, `/app/taxes`, `/app/discounts`, `/app/quotation-templates`, `/app/quotation-templates/[templateId]`).
 
-**Gate:** admin-only writes; correct 560 variant adjustment; allowed zero prices versus invalid negatives; all interval/availability/policy fields persist; tax and discount bounds/thresholds/caps validated; templates populate valid lines; pricing unit tests and PostgreSQL constraints pass; admin browser CRUD works. Test pricing previews without invoice writes. Historical invoice/redemption integration checks are deferred specifically to Phase 5.
+**Gate: PASS.** Catalog Playwright journeys were rerun successfully on 1 November 2026; see DEVELOPMENT_STATUS.md for actual commands. Verified requirements: admin-only writes; correct 560 variant adjustment; allowed zero prices versus invalid negatives; all interval/availability/policy fields persist; tax and discount bounds/thresholds/caps validated; templates populate valid lines; pricing unit tests and PostgreSQL constraints pass; admin browser CRUD works. Test pricing previews without invoice writes. Historical invoice/redemption integration checks are deferred specifically to Phase 5.
 
 ### Phase 4 - Quotation and subscription lifecycle
 
 **Depends on:** Phase 3.
 
-**Work:** create subscription draft; template-based quote editor; immutable quote versions/expiry; confirmation/activation; agreed product/plan/tax context and price snapshots; lifecycle actions; customer request submission/cancellation and staff approve/reject workflow; dated plan-policy enforcement; agreement versions for renewals/add-on changes. Show pending and completed changes on the same subscription detail page.
+**Work:** create subscription draft; template-based quote editor; immutable quote versions/expiry; confirmation/activation; agreed product/plan/tax context and price snapshots; lifecycle actions; customer request submission/cancellation and staff approve/reject workflow; dated plan-policy enforcement; agreement versions for renewals/add-on changes. Show pending and completed changes on the same subscription detail page. One subscription exists from Draft; confirmation accepts that agreement version rather than creating a duplicate subscription.
 
-**Pages delivered:** I04-I06, C02-C03. Customer/profile links connect to delivered subscription views.
+**Pages delivered:** I04–I06, C02–C03 (`/app/subscriptions`, `/app/subscriptions/new`, `/app/subscriptions/[subscriptionId]`, `/portal/subscriptions`, `/portal/subscriptions/[subscriptionId]`).
 
-**Gate:** Draft -> Quotation -> Confirmed -> Active path persists; repeat confirmation is safe; expired quote fails; invalid plan/date/quantity/state operations fail; requested changes never directly mutate billing; approve/reject/cancel access and effective dates work; disallowed pauses/renewals/closure rejected; quote/subscription snapshots survive catalog edits. Customer sees only own subscriptions/requests. Browser flow reaches active subscription. Invoice effects of scheduled changes are deferred to Phase 5.
+**Gate: PASS (1 November 2026).** Full backend suite: 82 passed; production build passed; staff/customer Playwright subscription journeys: 3 passed, zero skipped, including two disjoint discount rules and mobile overflow assertion. See DEVELOPMENT_STATUS.md for commands and deferred phase dependencies. Verified requirements: subscription created in draft state; quotation confirmation accepts agreement version; price snapshots preserved; customer ownership verified; staff-only approvals; customer cancellation of own requests; dated pause/resume; renewal/add-on agreement versions; accepted plan flags, quantities and service/boundary dates enforced; transitions tested with PostgreSQL persistence; customer/staff browser tests pass. The shared event applier is tested in this phase; billing invokes it chronologically in Phase 5 and scheduling invokes billing in Phase 8. Grace periods, notice policies and minimum service durations are not invented beyond accepted rules.
 
-### Phase 5 - Invoice engine, documents and delivery
+### Phase 5 - Billing engine, invoices, and documents
 
-**Depends on:** Phase 4 and the accepted calendar/money rules.
+**Depends on:** Phase 4.
 
 **Work:** one tested billing service plus CLI/admin trigger; per-period transactions, locks and unique invoice period; bounded backlog recovery; start/term/change eligibility; invoice/customer/company/line/tax/discount snapshots; capped discount redemption; invoice confirm/cancel; invoice number/due dates; local PDF/print document and configured SMTP send/retry. Persist run outcomes, per-period errors and delivery attempts. SMTP reset already exists from Phase 2; reuse its adapter.
 
-**Pages delivered:** I07-I08, A11, C04-C05. Invoice send/print/download works on delivery; no placeholder controls waiting for a later phase. Payment actions appear only in Phase 6.
+**Pages delivered:** I07–I08, A11, C04–C05 (`/app/invoices`, `/app/invoices/[invoiceId]`, `/app/billing-runs`, `/portal/invoices`, `/portal/invoices/[invoiceId]`).
 
-**Gate:** daily/weekly/monthly/yearly periods; month-end anchor restoration; leap year; final partial-period calculation; repeated/concurrent runs; interrupted/replayed billing; eligible backlog after expiry/closure; paused intervals and approved changes; same-transaction discount cap/rollback; catalog/profile edits do not rewrite issued documents; cancellation rules; no skipped eligible periods. Include a PostgreSQL fixture with at least 300 subscriptions due together, mixed eligibility and an injected per-period failure; reconcile every expected period to a created invoice or visible retryable failure, then recover without duplicates. Print/download matches stored data and customer ownership; send failure is retryable without reversing financial records. Manual trigger and CLI produce identical results. Add browser invoice confirm/send/download journey.
+**Gate: PASS (2 November 2026).** Full PostgreSQL suite: 100 passed; production build passed; live billing browser journeys: four passed, zero skipped, including real Mailpit PDF attachment and mobile/print checks. Independent-connection tests prove same-period uniqueness and a global one-use discount race. PDF samples were rendered and visually checked, including long descriptions across three pages. Verified requirements: single period unique constraint enforced; billing recovery catches missed periods; discount redemption limits respected; no double-advance; concurrent runs cannot duplicate invoices; document generation matches database state; retry handles transient failure; financial integration tests pass.
 
-### Phase 6 - Payment recording and reconciliation
+### Phase 6 - Payments, ledger, and reconciliation
 
 **Depends on:** Phase 5.
 
-**Work:** invoice-level payment dialog; persisted immutable payment records and actor; cash/bank transfer/UPI/card/cheque/other methods; payment date/note/reference validation; unique request keys and locked balance checks; derived Partially Paid/Paid; searchable payment history for operations and customer.
+**Work:** manual payment recording; payment methods/references; customer balance tracking; partial and final payments; unique payment request key; immutable ledger view; payment receipt documents. (No refunds, payment edits, or replacements under D09 initial scope).
 
-**Pages delivered:** I09, C06. Complete payment sections/actions in I08 and C05.
+**Pages delivered:** I09, C06 (`/app/payments`, `/portal/payments`).
 
-**Gate:** known 10,000 invoice -> 4,000 payment -> 6,000 remaining -> final 6,000 -> zero; reject another payment, zero/negative amounts, missing method/date/note, draft/cancelled invoices and customer writes. Repeated request returns the same payment; conflicting key reuse fails; concurrent partial payments cannot overpay. Balances reconcile to PostgreSQL rows; payment browser journey passes. Customer history remains isolated.
+**Gate: PASS (2 November 2026).** Full backend suite: 120 passed; production build passed; payment browser journeys: three passed, zero skipped, including a committed payment whose response is lost followed by reload/retry. Five independent-connection race cases verify settlement, overpayment, same-key replay, cross-invoice key collision and cancellation serialization. Verified requirements: payments serialized per invoice; same-key/same-payload retries return the original payment; changed payload conflicts; overpayment rejected; balances reconcile with payment sum; immutable payment records; payment receipts generated; Playwright payment tests pass.
 
-### Phase 7 - Dashboards, filters and reporting
+### Phase 7 - Analytics, reports, and operational overview
 
 **Depends on:** Phase 6.
 
-**Work:** role dashboards and admin finance report; known definitions for active subscriptions, payments received, current outstanding and overdue; date/customer/status filters; upcoming renewals and attention queues; SQL aggregation and indexed/paginated drill-downs. Each card links to the matching filtered list. Dashboards use only existing persisted operations; no invented activity or charts.
+**Work:** operational and customer overview dashboards; finance reporting; active subscriptions; cash received in range; current outstanding and overdue totals/counts; audit events; SQL aggregates with matching filters and source drill-down. Follow A10/I01/C01 in USER_FLOWS.md; no MRR/ARR claims or speculative export/chart scope.
 
-**Pages delivered:** I01, A10, C01. Switch post-login destinations to the final role dashboards. All 32 templates are now delivered.
+**Pages delivered:** I01, A10, C01 (`/app`, `/app/reports`, `/portal`).
 
-**Gate:** known data produces expected totals; Draft/Cancelled excluded from receivables; payment-date filter correct; active/paused/ended counts correct; drill-down filters match their cards; customer dashboard scopes every query. Reports do not download whole tables. Browser journeys verify dashboard changes after invoice/payment operations and usable empty/error states.
+**Gate: PASS (2 November 2026).** Full PostgreSQL suite: 126 passed; production build passed; three reporting browser journeys passed, zero skipped. SQL summary for the filtered browser sample: 9.2 ms (not the Phase 9 page-load benchmark). Verified: operational and customer dashboards load dynamic aggregates; financial report reconciles to persisted records; filters and source lists match metric definitions; query time within performance budget; audit log events intact.
 
-### Phase 8 - Automatic execution and recovery
+### Phase 8 - Scheduled billing, hardening, and operational readiness
 
-**Depends on:** Phase 5 engine and all Phase 7 regressions passing.
+**Depends on:** Phase 7.
 
-**Work:** configure Windows Task Scheduler or deployment scheduler to invoke the same command; run start-date activation, approved dated changes, recurring billing and configured auto-closure through tested domain services. Document executable/working directory/timezone, startup/restart, failed-run visibility, retries and disabling the schedule. Use demo data only. No extra page and no duplicate billing algorithm.
+**Work:** scheduled billing invocation (adding automated scheduler to the tested billing engine/CLI as planned in architecture and verified in PLANNING_VERIFICATION); comprehensive penetration testing; OWASP Top 10 verification; rate limiting verification under load; timezone edge cases (month-end, leap year, DST); transaction isolation level verification; session revocation under concurrency; CSRF edge cases.
 
-**Pages delivered:** no new templates; A11 shows actual scheduled/manual run outcomes and retry eligibility. Scheduler configuration stays in deployment documentation, not a generic settings screen.
+**Pages delivered:** none (hardening existing pages and operational scheduler infrastructure).
 
-**Gate:** an actual scheduled run invokes the expected command; repeated scheduled/manual runs are safe; downtime backlog recovers; failed work stays visible/retryable; auto-close-enabled terms close and others appear ended without out-of-term billing. Demonstrate no duplicate/omitted eligible period and no false success after partial failure.
+**Gate: PASS (2 November 2026, local application verification).** Full PostgreSQL suite: 138 passed; production build passed; core browser journeys five passed, hardening journeys four passed and billing regression four passed, zero skipped. Bandit and pinned dependency audits have no findings. Scope/limits are documented in SECURITY_VERIFICATION.md; no external penetration-test or production-network certification is claimed. Verified: scheduler triggers due billing runs without duplication; OWASP checklist passed; no information leaks in error responses; rate limits hold under parallel requests; timezone calculations verified across 28/29/30/31-day transitions; concurrent sessions properly revoked; security scan clean.
 
-### Phase 9 - Security, performance and final demonstration
+### Phase 9 - Performance benchmarking and evaluation readiness
 
-**Depends on:** Phases 0-8 accepted.
+**Depends on:** Phase 8.
 
-**Work:** fresh-clone setup rehearsal; migrations from empty PostgreSQL; idempotent seed using development-only credentials from environment; API/role/ownership review; responsive/keyboard validation of the entire inventory; query-plan review; measured browser performance; final documentation and shared team walkthrough. Resolve defects without adding new product scope.
+**Work:** generate benchmark dataset (propose 5,000 subscriptions, 50,000 invoices, 100,000 payments); run page load benchmarks against all 32 templates; measure p50/p95/max latencies under concurrency; tune SQL queries and indexes; optimize frontend bundle; verify all 15 user journeys end-to-end; prepare evaluation demonstration script.
 
-**Pages:** verify P01-P04, I01-I10, A01-A11, C01-C07. No page additions.
+**Pages delivered:** all 32 verified against performance budget.
 
-**Gate:** backend unit/PostgreSQL integration/browser suites and frontend checks pass; all visible actions work; 32 page templates accounted for; no tracked secrets/generated dumps; fresh teammate setup succeeds; demo uses persisted data and needs no manual DB edits. Every teammate explains their code, data relationships and test decisions.
+**Gate: PASS (3 November 2026, local delivery).** Final backend: 194 PostgreSQL tests pass; production build, 68-file lint and four decimal tests pass. All 84 desktop/mobile accessibility observations have zero violations/overflow; incomplete cases and keyboard behavior are reviewed. The linked evaluator UI rehearsal passes through actual Mailpit delivery, partial/final settlement, requests, reports and safe replay. All 840 cold/warm-client guarded-source browser observations over all 32 templates and staff variants are under two seconds, maximum 1,078.33 ms. Clean dependency/empty-schema setup, route-policy, private-file and source/action audits pass. See FINAL_ACCEPTANCE.md, PERFORMANCE_VERIFICATION.md and DEVELOPMENT_STATUS.md for commands, failures, limits and reproduction. Actual future human presentation participation is not fabricated.
+
+## 2. Business defaults accepted in Phase 0
+
+The following decisions D01–D10 were formally accepted by the team on 31 October 2026 without modification:
+
+| Decision | Accepted Default | Implementation Rule |
+|----------|-----------------|---------------------|
+| D01: Customer Login & Linking | One CUSTOMER login per customer; verified linking to pre-existing operational records. | Atomic customer/user registration for new users; pending signup with hashed expiring verification token and email delivery via Mailpit before linking existing customer records. |
+| D02: Change Requests & Review | Customers request pause/resume/renew/add-on changes; staff/admin reviews. | Self-service lifecycle changes create pending requests (`PENDING`); staff/admin reviews and approves or rejects at approved future boundaries. No direct customer modification of financial terms. |
+| D03: Plan Fee & Seat Entitlement | A plan fee includes its minimum seat quantity; explicit excess-seat unit price; separate add-ons. | Plan defines `base_fee`, `minimum_seats`, and `extra_seat_unit_price`. Subscription explicitly stores `seat_quantity >= minimum_seats`. Excess-seat line (`seat_quantity - minimum_seats`) * excess price. Included items are descriptive entitlements at ₹0.00. |
+| D04: Currency & Amounts | INR (`₹`), two-decimal amounts, positive integer quantities, exclusive percentage tax. | All monetary columns in PostgreSQL use `NUMERIC(18, 2)`. Quantities are positive integers (`INTEGER`). Transmitted as decimal strings. Tax calculated on discounted line bases. |
+| D05: Price & Term Freezing | Freeze sales prices and tax rates in the accepted agreement; changes require a new agreed version. | Commercial terms (agreed unit price, tax rate snapshots) are frozen upon quotation confirmation / agreement version acceptance. Catalog updates apply only to future drafts. |
+| D06: Discount Terms & Stacking | Pin assigned discount terms; no overlapping discounts on the same charge; eligibility at period start. | Discount assignment pins immutable `DiscountRevision`. Whole-subscription discount conflicts with product-scoped discounts; product rules can only coexist on disjoint charge lines. No discount stacking on the same line. Eligibility evaluated at period start. |
+| D07: Timezone & Payment Terms | Asia/Kolkata billing dates; calendar anchors; advance billing; default 15-day payment terms. | All business-date calculations use `Asia/Kolkata` timezone. Month-end calendar anchoring clamps to month end. Advance billing at period start. Default due date = invoice date + 15 days. |
+| D08: Boundary Changes & Pausing | Boundary-only voluntary changes; pause extends term; resume resets anchor; expiry partial period prorated. | Changes take effect at period boundaries. Pause opens an interval and stops service clock; resume shifts expiry by exact paused calendar days and establishes new anchor. Final partial period prorated actual/actual days. |
+| D09: Cancellation & Settlement | Cancel only unpaid invoices; preserve period/discount consumption; no replacement/refund/payment edits initially. | Invoices can only be cancelled if completely unpaid. Cancelled periods remain consumed (no re-billing same period, no discount refund). Overpayment rejected. No payment editing/deletion/refunds initially. |
+| D10: Infrastructure & Isolation | Single company, local PostgreSQL plus Docker Mailpit, no online gateway. | Native/local PostgreSQL persistence with strict test-database isolation; Docker Mailpit for local SMTP testing; manual payment recording; no external BaaS or third-party payment gateways. |
+
+## 3. Page inventory cross-reference
+
+The 32 page templates from `docs/USER_FLOWS.md` map to implementation phases as follows:
+
+| Template | Path | Role | Phase Delivered |
+|----------|------|------|-----------------|
+| P01 | `/login` | Public | Phase 2 |
+| P02 | `/register` | Public | Phase 2 |
+| P03 | `/forgot-password` | Public | Phase 2 |
+| P04 | `/reset-password` | Public | Phase 2 |
+| I01 | `/app` | Staff/Admin | Phase 7 |
+| I02 | `/app/customers` | Staff/Admin | Phase 2 |
+| I03 | `/app/customers/[customerId]` | Staff/Admin | Phase 2 |
+| I04 | `/app/subscriptions` | Staff/Admin | Phase 4 |
+| I05 | `/app/subscriptions/new` | Staff/Admin | Phase 4 |
+| I06 | `/app/subscriptions/[subscriptionId]` | Staff/Admin | Phase 4 |
+| I07 | `/app/invoices` | Staff/Admin | Phase 5 |
+| I08 | `/app/invoices/[invoiceId]` | Staff/Admin | Phase 5 |
+| I09 | `/app/payments` | Staff/Admin | Phase 6 |
+| I10 | `/app/profile` | Staff/Admin | Phase 2 |
+| A01 | `/app/staff` | Admin | Phase 2 |
+| A02 | `/app/products` | Admin | Phase 3 |
+| A03 | `/app/products/[productId]` | Admin | Phase 3 |
+| A04 | `/app/plans` | Admin | Phase 3 |
+| A05 | `/app/plans/[planId]` | Admin | Phase 3 |
+| A06 | `/app/taxes` | Admin | Phase 3 |
+| A07 | `/app/discounts` | Admin | Phase 3 |
+| A08 | `/app/quotation-templates` | Admin | Phase 3 |
+| A09 | `/app/quotation-templates/[templateId]` | Admin | Phase 3 |
+| A10 | `/app/reports` | Admin | Phase 7 |
+| A11 | `/app/billing-runs` | Admin | Phase 5 |
+| C01 | `/portal` | Customer | Phase 7 |
+| C02 | `/portal/subscriptions` | Customer | Phase 4 |
+| C03 | `/portal/subscriptions/[subscriptionId]` | Customer | Phase 4 |
+| C04 | `/portal/invoices` | Customer | Phase 5 |
+| C05 | `/portal/invoices/[invoiceId]` | Customer | Phase 5 |
+| C06 | `/portal/payments` | Customer | Phase 6 |
+| C07 | `/portal/profile` | Customer | Phase 2 |
+
+## 4. Evaluation and acceptance gates
+
+Every phase gate requires documented evidence before advancing:
+
+1. **Commands executed:** the exact shell commands run.
+2. **Test output:** the complete test runner output including count of passed/failed tests.
+3. **Database state:** verification that migrations ran and constraints hold in PostgreSQL.
+4. **Browser verification:** Playwright test results for delivered user journeys.
+5. **No regressions:** all previous phase tests continue to pass.
 
 **Mandatory performance evidence:** propose 5,000 subscriptions, 50,000 invoices and 100,000 payments. Agree actual fixture counts, hardware, browser, local/deployed topology and representative concurrency in Phase 0. Time navigation until primary content is usable for the 32 templates using authorized representative accounts/records; include filtered/paginated large collections. Record cold/warm results, sample counts, p50/p95/max and failures. Every sampled designated page load must be under two seconds; p95 alone does not satisfy the literal PDF target. Treat unmeasured environments as unknown, not proven. Bulk generation throughput is reported separately from interactive page latency.
 
@@ -147,4 +176,4 @@ Use a focused feature branch per phase or coherent subfeature, with another team
 
 After each phase provide: Implemented; Files changed; Design decisions; Commands run; Test results; Manual actions remaining; Known issues; Gate status. Report the exact repository commands that were actually run. A pending human review or required external setup stays visible; passing documentation checks does not imply application acceptance.
 
-**Current state:** Phase 0 accepted; Phase 1 (foundation, database models, migrations, and layout) implemented and verified (PASS); Phase 2 (Identity, staff and customer records, pages P01–P04, I02–I03, I10, A01, C07, Mailpit SMTP linking/reset, Argon2id, and Playwright journeys) implemented and verified (PASS). Next phase is Phase 3 (Catalog, pricing rules and templates), pending team request.
+**Current state:** All phases 0–9 have verified local delivery gates. The final source-to-evidence audit is [docs/FINAL_ACCEPTANCE.md](docs/FINAL_ACCEPTANCE.md), and the reproducible team walkthrough is [docs/EVALUATOR_DEMO.md](docs/EVALUATOR_DEMO.md). Earlier per-phase test counts describe their historical checkpoints.

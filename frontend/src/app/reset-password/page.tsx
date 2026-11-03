@@ -106,7 +106,7 @@ function ResetPasswordContent() {
 
         {success ? (
           <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-lg text-center">
-            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-emerald-100 text-emerald-600 text-xl font-bold mb-4">
+            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-emerald-100 text-emerald-700 text-xl font-bold mb-4">
               ✓
             </div>
             <h3 className="font-semibold text-emerald-900 mb-2">

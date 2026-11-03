@@ -1,12 +1,12 @@
 # Brightloop - Phase 0 architecture and handoff
 
-Status: PHASE 0 ACCEPTED BY TEAM on 31 October 2026. Implementation proceeds with Phase 1.
+Status: Phase 0 accepted on 31 October 2026. Phases 1–8 are implemented and verified; evidence and remaining phases are tracked in DEVELOPMENT_STATUS.md. Later service contracts below remain design requirements until their phase passes.
 
 ## Repository assessment and boundaries
 
 Inspected branch: `v2-DEN` (commit `c5e29fd`). Existing planning, environment helpers and Compose files are preserved. PostgreSQL 18 is local on Windows with separate development/test database owners. Docker runs the local Mailpit inbox; it does not duplicate PostgreSQL. Existing private environment files are ignored. Connectivity and email checks were run during environment setup; Phase 0 does not rerun them or change database records.
 
-There are no application source modules, dependency manifests, ORM models, migrations or application tests yet. No Phase 1 code is introduced here. Existing working-tree changes remain uncommitted; no commit, push or ownership assignment to real teammates is invented.
+The repository now contains frontend/backend applications, dependency manifests, SQLAlchemy models, Alembic migrations and PostgreSQL/browser tests. Existing teammate changes are preserved. No commit, push or ownership assignment to real teammates is inferred from implementation work.
 
 Read [business-rules.md](business-rules.md) for decisions/examples; [database-design.md](database-design.md) for entities/constraints; [api-design.md](api-design.md) for routes/permissions; [USER_FLOWS.md](USER_FLOWS.md) for the unchanged 32-template interface; [PLANNING_VERIFICATION.md](PLANNING_VERIFICATION.md) for source traceability.
 
@@ -18,13 +18,13 @@ flowchart LR
     Next --> API[FastAPI /api/v1]
     API --> Services[Identity, catalog, commercial, billing, payments, reporting]
     CLI[Billing CLI] --> Services
-    Scheduler[Scheduler added in Phase 8] --> CLI
+    Scheduler[Separate scheduler worker] --> Services
     Services --> DB[(PostgreSQL)]
     Services --> SMTP[SMTP adapter / local Mailpit]
     Services --> PDF[Invoice document renderer]
 ```
 
-One modular backend with direct SQLAlchemy sessions; no queue/worker/cache platform. Backend routes validate Pydantic schemas, enforce dependencies and call services. Services define transactions. Repository/query helpers are added only for recurring nontrivial queries. One Decimal calculator serves previews, agreements and invoices. Documents render persisted snapshots only. Browser API client handles structured errors and auth; React Hook Form/Zod handles local feedback and TanStack Query refreshes appropriate query keys after writes.
+One modular backend with direct SQLAlchemy sessions; no queue/worker/cache platform. Backend routes validate Pydantic schemas, enforce dependencies and call services. Services define transactions. Repository/query helpers are added only for recurring nontrivial queries. One Decimal calculator serves previews, agreements and invoices. Documents render persisted snapshots only. The browser API client handles structured errors and auth. React controlled forms and browser constraints provide local feedback; backend validation remains authoritative. Page loaders refresh persisted data after writes, with stale-response guards and URL-backed collection filters. Catalog selectors use bounded server search/pagination and separate selected-record hydration.
 
 Proposed layout, adapted in Phase 1 rather than created blindly:
 
@@ -111,3 +111,13 @@ Phase 0 checklist:
 Performed 31 October 2026: `git status --short --branch`, `rg --files docs scripts`, document reads, `git diff --check`, `git diff --stat`, and `python -` with read-only inline assertions. The Python assertions checked all 9 Markdown files for local links/balanced fences/trailing whitespace; 32 unique page IDs/routes and phase counts; 15 journeys; 10 ordered phases; 10 decision rows; 36 defined schema entities and all ER diagram entity references. Decimal calculations independently reconciled the 2,888.64 worked invoice and 500.00 final-period example. All those checks passed. The ER syntax was inspected as text; no rendered-diagram visual check or database constraint execution is claimed.
 
 Created business-rules.md, database-design.md, api-design.md and this file; updated BUILD_GUIDE.md, USER_FLOWS.md and README.md to reference one proposed rule source and expose seat/excess pricing fields. Existing AGENTS.md and environment work were preserved. No application models, migrations, runtime tests or database modifications were performed in this phase. Working-tree changes are not committed/pushed.
+
+
+## Implemented scheduler and authentication hardening
+
+The Phase 8 worker (`scripts/run_scheduler.py`) calls the same bounded service directly, under a pinned session-level PostgreSQL advisory lock. Each manual/CLI/scheduled billing run owns its own advisory lock, allowing recovery to mark only abandoned RUNNING runs INTERRUPTED. Runtime heartbeat, interval, failure status, last run and scan continuation persist in scheduler_state. Auto-close uses the accepted term flag and waits for historical billing completion, excluding open pauses. Old uncertain invoice email attempts become UNKNOWN without automatic resend. See OPERATIONS.md for process supervision and recovery.
+
+Authentication sliding windows persist under hashed keys in rate_limit_windows with row locking, so parallel API workers share one allowance. A user row lock serializes session creation with credential changes/deactivation; login revalidates the exact previously verified password hash before issuing a session. Password change plus other-session revocation is atomic. Safe authentication audit events complement financial events. No raw credentials or tokens are stored in audit payloads.
+
+
+Phase 9 query measurements identified repeated summary aggregation. Receipt totals and balance/overdue totals now aggregate each source once within one statement snapshot; recent invoices restrict payment aggregation to five selected identities. Customer/plan scope also restricts the payment grouping input. No browser totals/cache are authoritative. See PERFORMANCE_VERIFICATION.md for measured query plans and browser boundaries. Temporary benchmark API/frontend processes use the same application code against a dedicated synthetic schema; they are test infrastructure, not a second product backend.

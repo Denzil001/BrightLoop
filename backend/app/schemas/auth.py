@@ -1,3 +1,4 @@
+from app.schemas.validation import required_text
 import re
 import uuid
 from typing import Optional
@@ -16,9 +17,10 @@ class UserDTO(BaseModel):
 
 
 class RegisterRequest(BaseModel):
+    _required_text = field_validator("name", mode="before")(required_text)
     name: str = Field(..., min_length=1, max_length=255)
     email: str = Field(..., max_length=255)
-    password: str = Field(..., min_length=9)
+    password: str = Field(..., min_length=9, max_length=1024)
     company: Optional[str] = Field(None, max_length=255)
 
     @field_validator("email")
@@ -42,7 +44,7 @@ class VerifySignupRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     email: str = Field(..., max_length=255)
-    password: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1, max_length=1024)
 
     @field_validator("email")
     @classmethod
@@ -73,12 +75,12 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str = Field(..., min_length=10)
-    new_password: str = Field(..., min_length=9)
+    new_password: str = Field(..., min_length=9, max_length=1024)
 
 
 class ChangePasswordRequest(BaseModel):
-    current_password: str = Field(..., min_length=1)
-    new_password: str = Field(..., min_length=9)
+    current_password: str = Field(..., min_length=1, max_length=1024)
+    new_password: str = Field(..., min_length=9, max_length=1024)
 
 
 class CsrfResponse(BaseModel):

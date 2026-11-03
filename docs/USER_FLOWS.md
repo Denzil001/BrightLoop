@@ -117,7 +117,7 @@ Search subscription/quote number/customer; All/Quotations views; lifecycle/plan/
 
 **Route:** `/app/subscriptions/new`. **Phase:** 4.
 
-Customer, available plan, optional template; explicit seat quantity, start/expiry, payment-term days, quote-validity days; plan fee, included-seat threshold and excess-seat charge; included items and product/variant/add-on lines with quantity, agreed unit price, taxes, assigned existing discount and calculated line amount. Clearly distinguish included lines from additional charges. Backend preview shows each line's amount plus subtotal, estimated discount/tax and total. The proposed seat pricing follows [business-rules.md](business-rules.md) pending Phase 0 acceptance.
+Customer, available plan, optional template; explicit seat quantity, start/expiry, payment-term days, quote-validity days; plan fee, included-seat threshold and excess-seat charge; included items and product/variant/add-on lines with quantity, agreed unit price, taxes, assigned existing discount and calculated line amount. Clearly distinguish included lines from additional charges. Backend preview shows each line's amount plus subtotal, estimated discount/tax and total. Seat pricing follows the accepted Phase 0 rules in [business-rules.md](business-rules.md).
 
 Save draft -> I06 DRAFT. Save and issue quotation -> immutable quote version and I06 QUOTATION. Validate minimum quantities/date windows/discount conflicts. Permitted agreed-price overrides require backend validation/reason. Staff cannot create configuration here. Preview consumes no discount redemption. Warn before losing unsaved changes.
 
