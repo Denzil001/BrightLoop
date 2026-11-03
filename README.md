@@ -1,6 +1,7 @@
 # Brightloop Subscription Management System
 
 This repository hosts Brightloop, a subscription management web application built for ADMIN, STAFF and CUSTOMER roles.
+OODOxMakethon'26
 
 ## Primary evaluation requirements
 
